@@ -1,0 +1,44 @@
+.bubble-card {
+  border-radius: 0.8rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #d6d6d6;
+  background: #fff;
+}
+
+.bubble-card.own-message {
+  border-color: #b9d8ff;
+  background: #ecf4ff;
+}
+
+.bubble-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+  color: #4a4a4a;
+  font-size: 0.85rem;
+}
+
+.bubble-meta .author {
+  font-weight: 700;
+  color: #222;
+}
+
+.author-prefix {
+  display: none;
+}
+
+.bubble-meta .timestamp {
+  opacity: 0.85;
+}
+
+.bubble-content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubble-actions {
+  margin-top: 0.5rem;
+}
