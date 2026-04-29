@@ -8,23 +8,124 @@
             {
                 "imports": {
                     "vue": "https://cdn.jsdelivr.net/npm/vue@3.5.32/dist/vue.esm-browser.js",
-                    "vue-router": "https://cdn.jsdelivr.net/npm/vue-router@5.0.4/dist/vue-router.esm-browser.prod.js"
+                    "vue-router": "https://cdn.jsdelivr.net/npm/vue-router@4/dist/vue-router.esm-browser.js",
+                    "@vue/devtools-api": "https://cdn.jsdelivr.net/npm/@vue/devtools-api@6.6.4/lib/esm/index.js",
+                    "@graffiti-garden/implementation-local": "https://cdn.jsdelivr.net/npm/@graffiti-garden/implementation-local@1.2.0/dist/browser/index.js",
+                    "@graffiti-garden/implementation-decentralized": "https://cdn.jsdelivr.net/npm/@graffiti-garden/implementation-decentralized@0.0.9/dist/browser/index.js",
+                    "@graffiti-garden/wrapper-vue": "https://cdn.jsdelivr.net/npm/@graffiti-garden/wrapper-vue@1.2.2/dist/browser/plugin.mjs"
                 }
             }
         </script>
-        <link rel="stylesheet" href="./style.css" />
-        <script src="./main.js" type="module"></script>
+        <script src="index.js" type="module"></script>
+        <link rel="stylesheet" href="style.css" />
     </head>
     <body>
         <div id="app">Loading...</div>
-        <template id="template">
-            <header>
-                <h1><router-link :to="`/`"> Chat App </router-link></h1>
-            </header>
-            
-            <main>
-                <router-view></router-view>
+        <template id="root-template">
+            <main class="tab-content">
+                <router-view />
             </main>
+            <nav class="bottom-toolbar">
+                <router-link to="/messages" class="tab-link">Messages</router-link>
+                <router-link to="/contacts" class="tab-link">Contacts</router-link>
+                <router-link to="/settings" class="tab-link">Settings</router-link>
+            </nav>
+        </template>
+        <template id="messages-template">
+            <h1>Chat</h1>
+            <button v-if="!$graffitiSession.value" @click="$graffiti.login()">
+                Log In
+            </button>
+            <template v-else>
+                <button @click="$graffiti.logout($graffitiSession.value)">
+                    Log Out
+                </button>
+                <h2>{{ selectedChat.title }}</h2>
+                <form @submit.prevent="sendMessage()">
+                    <input
+                        type="text"
+                        v-model="myMessage"
+                        placeholder="Message"
+                    />
+                    <input
+                        type="submit"
+                        :value="isSending ? 'Sending...' : 'Send'"
+                        :disabled="!canSendMessage || isSending"
+                    />
+                </form>
+                <div>
+                    <h3>Create Group Chat</h3>
+                    <form @submit.prevent="newChat()">
+                        <input
+                            type="text"
+                            v-model="newChatTitle"
+                            placeholder="Group name"
+                        />
+                        <input
+                            type="submit"
+                            :value="isCreatingChat ? 'Creating...' : 'Create Group'"
+                            :disabled="!canCreateChat || isCreatingChat"
+                        />
+                    </form>
+                </div>
+                <div class="chat-list">
+                    <h3>Chats</h3>
+                    <p v-if="areChatsLoading">
+                        <em>Loading chats...</em>
+                    </p>
+                    <div v-else v-for="chat in availableChats" :key="chat.channel">
+                        <router-link
+                            :to="chatRoute(chat.channel)"
+                            class="chat-link"
+                            :class="{ active: channel === chat.channel }"
+                        >
+                            {{ chat.title }}
+                        </router-link>
+                    </div>
+                </div>
+                <button
+                    @click="leaveChat()"
+                    :disabled="!canLeaveSelectedChat || isLeavingChat"
+                >
+                    {{ isLeavingChat ? "Leaving..." : "Leave Group" }}
+                </button>
+            </template>
+
+            <h2>Messages</h2>
+
+            <p v-if="areMessageObjectsLoading">
+                <em>Loading messages...</em>
+            </p>
+            <ul v-else class="messages-list">
+                <li v-for="object of sortedMessageObjects" :key="object.url">
+                    <message-bubble
+                        :actor="object.actor"
+                        :content="object.value.content"
+                        :published="object.value.published"
+                        :session-actor="$graffitiSession.value?.actor"
+                    >
+                        <template #actions>
+                            <button
+                                v-if="object.actor===$graffitiSession.value?.actor"
+                                @click="deleteMessage(object)"
+                                :disabled="isDeleting.has(object.url)"
+                            >
+                                {{
+                                    isDeleting.has(object.url)
+                                        ? "Deleting..."
+                                        : "Delete"
+                                }}
+                            </button>
+                        </template>
+                    </message-bubble>
+                </li>
+            </ul>
+        </template>
+        <template id="placeholder-template">
+            <section class="placeholder-view">
+                <h1>{{ title }}</h1>
+                <p>{{ description }}</p>
+            </section>
         </template>
     </body>
 </html>
