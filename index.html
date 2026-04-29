@@ -100,7 +100,6 @@
                 <li v-for="object of sortedMessageObjects" :key="object.url">
                     <message-bubble
                         :actor="object.actor"
-                        :username="object.actor"
                         :content="object.value.content"
                         :published="object.value.published"
                         :session-actor="$graffitiSession.value?.actor"

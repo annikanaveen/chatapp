@@ -1,6 +1,8 @@
 <article class="bubble-card" :class="{ 'own-message': isMine }">
   <header class="bubble-meta">
-    <span class="author">{{ displayName }}</span>
+    <span class="author">
+      <graffiti-actor-to-handle :actor="actor"></graffiti-actor-to-handle>
+    </span>
     <span aria-hidden="true">•</span>
     <time class="timestamp" :datetime="isoTimestamp">{{ formattedTimestamp }}</time>
   </header>

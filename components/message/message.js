@@ -38,7 +38,6 @@ const MessageBubble = {
   name: "MessageBubble",
   props: {
     actor: { type: String, required: true },
-    username: { type: String, default: "" },
     content: { type: String, required: true },
     published: { type: Number, required: true },
     sessionActor: { type: String, default: "" },
@@ -48,13 +47,6 @@ const MessageBubble = {
       // Keep rendering if style fetch fails.
     });
 
-    function stripGraffitiActorPrefix(value) {
-      if (typeof value !== "string") {
-        return "";
-      }
-      return value.replace(/^graffiti\.actor[.:/-]?/, "");
-    }
-
     const timestampDate = new Date(props.published);
     function formatTimestamp(timestamp) {
       const date = new Date(timestamp);
@@ -62,8 +54,6 @@ const MessageBubble = {
     }
 
     return {
-      displayName:
-        stripGraffitiActorPrefix(props.username || props.actor) || "Unknown user",
       formattedTimestamp: formatTimestamp(props.published),
       isoTimestamp: Number.isNaN(timestampDate.getTime())
         ? ""
