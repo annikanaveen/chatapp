@@ -12,6 +12,7 @@ import {
   useGraffitiSession,
   useGraffitiDiscover,
 } from "@graffiti-garden/wrapper-vue";
+import { MessageBubble } from "./components/message/message.js";
 
 const DIRECTORY_CHANNEL = "main-channel-dftw";
 const DEFAULT_CHAT_TITLE = "ALL";
@@ -315,7 +316,13 @@ function setup() {
   };
 }
 
-const MessagesView = { template: "#messages-template", setup };
+const MessagesView = {
+  template: "#messages-template",
+  setup,
+  components: {
+    MessageBubble,
+  },
+};
 const RootShell = { template: "#root-template" };
 const AppRoot = { template: "<router-view />" };
 const ContactsView = {

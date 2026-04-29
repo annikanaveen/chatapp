@@ -1,0 +1,11 @@
+<article class="bubble-card" :class="{ 'own-message': isMine }">
+  <header class="bubble-meta">
+    <span class="author">{{ displayName }}</span>
+    <span aria-hidden="true">•</span>
+    <time class="timestamp" :datetime="isoTimestamp">{{ formattedTimestamp }}</time>
+  </header>
+  <p class="bubble-content">{{ content }}</p>
+  <footer v-if="$slots.actions" class="bubble-actions">
+    <slot name="actions"></slot>
+  </footer>
+</article>

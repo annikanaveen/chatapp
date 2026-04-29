@@ -96,20 +96,29 @@
             <p v-if="areMessageObjectsLoading">
                 <em>Loading messages...</em>
             </p>
-            <ul v-else>
+            <ul v-else class="messages-list">
                 <li v-for="object of sortedMessageObjects" :key="object.url">
-                    <strong>
-                        <graffiti-actor-to-handle :actor="object.actor">
-                        </graffiti-actor-to-handle> </strong
-                    >: {{ object.value.content }}
-                    <button
-                        v-if="object.actor===$graffitiSession.value?.actor"
-                        @click="deleteMessage(object)"
-                        :disabled="isDeleting.has(object.url)"
+                    <message-bubble
+                        :actor="object.actor"
+                        :username="object.actor"
+                        :content="object.value.content"
+                        :published="object.value.published"
+                        :session-actor="$graffitiSession.value?.actor"
                     >
-                        {{ isDeleting.has(object.url) ? "Deleting..." : "Delete"
-                        }}
-                    </button>
+                        <template #actions>
+                            <button
+                                v-if="object.actor===$graffitiSession.value?.actor"
+                                @click="deleteMessage(object)"
+                                :disabled="isDeleting.has(object.url)"
+                            >
+                                {{
+                                    isDeleting.has(object.url)
+                                        ? "Deleting..."
+                                        : "Delete"
+                                }}
+                            </button>
+                        </template>
+                    </message-bubble>
                 </li>
             </ul>
         </template>
