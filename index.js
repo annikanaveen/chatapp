@@ -34,28 +34,12 @@ function setup() {
     return normalizeChannel(route.params.channel);
   });
 
-  function chatRoute(chatChannel) {
-    return {
-      name: "messages-chat",
-      params: { channel: normalizeChannel(chatChannel) },
-    };
-  }
-
-  function navigateToChat(chatChannel, options = {}) {
-    const { replace = false } = options;
-    const targetChannel = normalizeChannel(chatChannel);
-    const currentChannel = normalizeChannel(route.params.channel);
-    if (route.name === "messages-chat" && targetChannel === currentChannel) {
-      return;
-    }
-
-    const navigate = replace ? router.replace : router.push;
-    navigate(chatRoute(targetChannel));
+  function goToChannelList() {
+    router.push({ name: "messages-directory" });
   }
 
   // Declare a signal for the message entered in the chat
   const myMessage = ref("");
-  const newChatTitle = ref("");
 
   // "Discover" messages in the chat
   const { objects: messageObjects, isFirstPoll: areMessageObjectsLoading } =
@@ -115,40 +99,10 @@ function setup() {
     }
   }
 
-  const isCreatingChat = ref(false);
-  const canCreateChat = computed(() => {
-    return Boolean(session.value && newChatTitle.value.trim());
-  });
-
-  async function newChat() {
-    if (!canCreateChat.value) {
-      return;
-    }
-
-    const createdChannel = crypto.randomUUID();
-    isCreatingChat.value = true;
-    try {
-      await graffiti.post(
-        {
-          value: {
-            activity: "Create",
-            type: "Chat",
-            channel: createdChannel,
-            title: newChatTitle.value.trim(),
-            published: Date.now(),
-          },
-          channels: [DIRECTORY_CHANNEL],
-        },
-        session.value,
-      );
-      navigateToChat(createdChannel);
-      newChatTitle.value = "";
-    } finally {
-      isCreatingChat.value = false;
-    }
-  }
-
-  const { objects: chatObjects, isFirstPoll: areChatsLoading } = useGraffitiDiscover(
+  const {
+    objects: chatObjects,
+    isFirstPoll: areDirectoryChatsLoading,
+  } = useGraffitiDiscover(
     [DIRECTORY_CHANNEL],
     {
       properties: {
@@ -163,10 +117,11 @@ function setup() {
           },
         },
       },
-    }
+    },
   );
 
-  const { objects: chatLeaveObjects } = useGraffitiDiscover(
+  const { objects: chatLeaveObjects, isFirstPoll: areLeaveObjectsLoading } =
+    useGraffitiDiscover(
     [DIRECTORY_CHANNEL],
     {
       properties: {
@@ -235,14 +190,38 @@ function setup() {
     );
   });
 
-  watchEffect(() => {
+  watchEffect((onCleanup) => {
+    // Until directory + leave data have finished their first poll, `availableChats`
+    // only contains ALL — redirecting would incorrectly kick users out of every
+    // non-main channel. Wait for sync, then re-check (with a short delay so a
+    // just-created chat can appear in discover).
+    if (areDirectoryChatsLoading.value || areLeaveObjectsLoading.value) {
+      return;
+    }
+
     const isCurrentChatVisible = availableChats.value.some((chat) => {
       return chat.channel === channel.value;
     });
 
-    if (!isCurrentChatVisible) {
-      navigateToChat(DIRECTORY_CHANNEL, { replace: true });
+    if (isCurrentChatVisible) {
+      return;
     }
+
+    const bounce = setTimeout(() => {
+      if (areDirectoryChatsLoading.value || areLeaveObjectsLoading.value) {
+        return;
+      }
+      const stillMissing = !availableChats.value.some((chat) => {
+        return chat.channel === channel.value;
+      });
+      if (stillMissing) {
+        router.replace({ name: "messages-directory" });
+      }
+    }, 600);
+
+    onCleanup(() => {
+      clearTimeout(bounce);
+    });
   });
 
   const isLeavingChat = ref(false);
@@ -270,7 +249,7 @@ function setup() {
         session.value,
       );
 
-      navigateToChat(DIRECTORY_CHANNEL);
+      goToChannelList();
     } finally {
       isLeavingChat.value = false;
     }
@@ -300,30 +279,180 @@ function setup() {
     sendMessage,
     isDeleting,
     deleteMessage,
-    newChat,
-    newChatTitle,
-    canCreateChat,
-    isCreatingChat,
-    areChatsLoading,
     availableChats,
     selectedChat,
     canLeaveSelectedChat,
     isLeavingChat,
     leaveChat,
-    chats,
     channel,
+    goToChannelList,
+  };
+}
+
+function directorySetup() {
+  const graffiti = useGraffiti();
+  const session = useGraffitiSession();
+  const router = useRouter();
+
+  function normalizeChannel(channelParam) {
+    return typeof channelParam === "string" && channelParam.trim()
+      ? channelParam
+      : DIRECTORY_CHANNEL;
+  }
+
+  function chatRoute(chatChannel) {
+    return {
+      name: "messages-chat",
+      params: { channel: normalizeChannel(chatChannel) },
+    };
+  }
+
+  const newChatTitle = ref("");
+  const isCreatingChat = ref(false);
+  const canCreateChat = computed(() => {
+    return Boolean(session.value && newChatTitle.value.trim());
+  });
+
+  async function newChat() {
+    if (!canCreateChat.value) {
+      return;
+    }
+
+    const createdChannel = crypto.randomUUID();
+    isCreatingChat.value = true;
+    try {
+      await graffiti.post(
+        {
+          value: {
+            activity: "Create",
+            type: "Chat",
+            channel: createdChannel,
+            title: newChatTitle.value.trim(),
+            published: Date.now(),
+          },
+          channels: [DIRECTORY_CHANNEL],
+        },
+        session.value,
+      );
+      await router.push(chatRoute(createdChannel));
+      newChatTitle.value = "";
+    } finally {
+      isCreatingChat.value = false;
+    }
+  }
+
+  const { objects: chatObjects, isFirstPoll: areChatsLoading } = useGraffitiDiscover(
+    [DIRECTORY_CHANNEL],
+    {
+      properties: {
+        value: {
+          required: ["activity", "type", "channel", "title", "published"],
+          properties: {
+            activity: { const: "Create" },
+            type: { const: "Chat" },
+            channel: { type: "string" },
+            title: { type: "string" },
+            published: { type: "number" },
+          },
+        },
+      },
+    },
+  );
+
+  const { objects: chatLeaveObjects } = useGraffitiDiscover(
+    [DIRECTORY_CHANNEL],
+    {
+      properties: {
+        value: {
+          required: ["activity", "type", "channel", "published"],
+          properties: {
+            activity: { const: "Leave" },
+            type: { const: "Chat" },
+            channel: { type: "string" },
+            published: { type: "number" },
+          },
+        },
+      },
+    },
+  );
+
+  const chats = computed(() => {
+    const byChannel = new Map();
+    for (const object of chatObjects.value) {
+      byChannel.set(object.value.channel, {
+        channel: object.value.channel,
+        title: object.value.title,
+        published: object.value.published,
+      });
+    }
+    return [...byChannel.values()].toSorted((a, b) => {
+      return b.published - a.published;
+    });
+  });
+
+  const leftChannels = computed(() => {
+    const currentActor = session.value?.actor;
+    const channels = new Set();
+
+    if (!currentActor) {
+      return channels;
+    }
+
+    for (const object of chatLeaveObjects.value) {
+      if (object.actor === currentActor) {
+        channels.add(object.value.channel);
+      }
+    }
+
+    return channels;
+  });
+
+  const availableChats = computed(() => {
+    const visibleChats = [{ channel: DIRECTORY_CHANNEL, title: DEFAULT_CHAT_TITLE }];
+
+    for (const chat of chats.value) {
+      if (!leftChannels.value.has(chat.channel)) {
+        visibleChats.push(chat);
+      }
+    }
+
+    return visibleChats;
+  });
+
+  return {
+    newChatTitle,
+    canCreateChat,
+    isCreatingChat,
+    newChat,
+    areChatsLoading,
+    availableChats,
     chatRoute,
   };
 }
 
-const MessagesView = {
-  template: "#messages-template",
+const MessagesThreadView = {
+  template: "#messages-thread-template",
   setup,
   components: {
     MessageBubble,
   },
 };
-const RootShell = { template: "#root-template" };
+
+const MessagesDirectoryView = {
+  template: "#messages-directory-template",
+  setup: directorySetup,
+};
+
+const RootShell = {
+  template: "#root-template",
+  setup() {
+    const route = useRoute();
+    const hideBottomToolbar = computed(() => {
+      return route.matched.some((record) => record.meta.hideTabBar);
+    });
+    return { hideBottomToolbar };
+  },
+};
 const AppRoot = { template: "<router-view />" };
 const FormsView = {
   template: "#placeholder-template",
@@ -378,16 +507,17 @@ const router = createRouter({
       path: "/",
       component: RootShell,
       children: [
-        { path: "", redirect: { name: "messages-home" } },
+        { path: "", redirect: { name: "messages-directory" } },
         {
           path: "messages",
-          name: "messages-home",
-          redirect: { name: "messages-chat", params: { channel: DIRECTORY_CHANNEL } },
+          name: "messages-directory",
+          component: MessagesDirectoryView,
         },
         {
           path: "messages/chat/:channel",
           name: "messages-chat",
-          component: MessagesView,
+          component: MessagesThreadView,
+          meta: { hideTabBar: true },
         },
         { path: "forms", name: "forms", component: FormsView },
         { path: "calendar", name: "calendar", component: CalendarView },
@@ -396,7 +526,7 @@ const router = createRouter({
         { path: "settings", name: "settings", component: SettingsView },
       ],
     },
-    { path: "/:pathMatch(.*)*", redirect: { name: "messages-home" } },
+    { path: "/:pathMatch(.*)*", redirect: { name: "messages-directory" } },
   ],
 });
 

@@ -1,13 +1,31 @@
+html {
+  height: 100%;
+}
+
 body {
   font-family: Arial, Helvetica, sans-serif;
   margin: 0;
-  padding: 1rem;
+  padding: 0;
+  min-height: 100%;
   line-height: 1.4;
 }
 
 #app {
   max-width: 70rem;
   margin: 0 auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 1rem;
+}
+
+.tab-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .header-row {
@@ -90,6 +108,169 @@ input[type="submit"] {
 .chat-link.active {
   font-weight: 700;
   border: 2px solid #111;
+}
+
+.chat-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.chat-link-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-link-chevron {
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  opacity: 0.55;
+  line-height: 1;
+}
+
+.messages-directory {
+  padding-bottom: 0.5rem;
+}
+
+.directory-toolbar {
+  margin-bottom: 0.75rem;
+}
+
+.create-chat-block {
+  margin: 1rem 0;
+  padding: 0.75rem 0;
+  border-top: 1px solid #e5e5e5;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.create-chat-block h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.messages-thread-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: -1rem;
+  padding: 0;
+  background: #f4f4f5;
+}
+
+.messages-thread-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  flex-shrink: 0;
+}
+
+.thread-back-btn {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 0.35rem;
+  background: #fafafa;
+  cursor: pointer;
+}
+
+.thread-back-btn:hover {
+  background: #eee;
+}
+
+.messages-thread-title {
+  margin: 0;
+  font-size: 1.05rem;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-header-actions {
+  min-width: 3.25rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.thread-leave-btn {
+  font: inherit;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.thread-login-banner {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  background: #fff8e6;
+  border-bottom: 1px solid #edd;
+  flex-shrink: 0;
+}
+
+.thread-login-banner button {
+  font: inherit;
+  cursor: pointer;
+  margin-right: 0.25rem;
+}
+
+.messages-thread-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.65rem 0.75rem 1rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.thread-loading {
+  margin: 0.5rem 0;
+}
+
+.thread-messages-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.thread-messages-list li {
+  margin-bottom: 0.65rem;
+}
+
+.messages-thread-composer {
+  flex-shrink: 0;
+  padding: 0.5rem 0.75rem 0.65rem;
+  background: #fff;
+  border-top: 1px solid #ddd;
+}
+
+.messages-thread-composer form {
+  margin: 0;
+}
+
+.bottom-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding-top: 0.75rem;
+  margin-top: auto;
+  border-top: 1px solid #e0e0e0;
+}
+
+.tab-link {
+  padding: 0.35rem 0.5rem;
+  color: #1a1a8c;
+  text-decoration: none;
+  border-radius: 0.25rem;
+}
+
+.tab-link:hover {
+  background: #eef;
 }
 
 ul {
