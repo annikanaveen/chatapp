@@ -25,6 +25,10 @@
   color: #222;
 }
 
+.author-prefix {
+  display: none;
+}
+
 .bubble-meta .timestamp {
   opacity: 0.85;
 }

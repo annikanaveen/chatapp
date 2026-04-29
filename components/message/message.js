@@ -47,6 +47,16 @@ const MessageBubble = {
       // Keep rendering if style fetch fails.
     });
 
+    function formatHandle(handle) {
+      if (handle === undefined) {
+        return "Loading...";
+      }
+      if (handle === null) {
+        return "Unknown user";
+      }
+      return String(handle).replace(/^graffiti\.actor[.:/-]?/, "");
+    }
+
     const timestampDate = new Date(props.published);
     function formatTimestamp(timestamp) {
       const date = new Date(timestamp);
@@ -54,6 +64,7 @@ const MessageBubble = {
     }
 
     return {
+      formatHandle,
       formattedTimestamp: formatTimestamp(props.published),
       isoTimestamp: Number.isNaN(timestampDate.getTime())
         ? ""
