@@ -8,97 +8,23 @@
             {
                 "imports": {
                     "vue": "https://cdn.jsdelivr.net/npm/vue@3.5.32/dist/vue.esm-browser.js",
-                    "@graffiti-garden/implementation-local": "https://cdn.jsdelivr.net/npm/@graffiti-garden/implementation-local@1.2.0/dist/browser/index.js",
-                    "@graffiti-garden/implementation-decentralized": "https://cdn.jsdelivr.net/npm/@graffiti-garden/implementation-decentralized@0.0.9/dist/browser/index.js",
-                    "@graffiti-garden/wrapper-vue": "https://cdn.jsdelivr.net/npm/@graffiti-garden/wrapper-vue@1.2.2/dist/browser/plugin.mjs"
+                    "vue-router": "https://cdn.jsdelivr.net/npm/vue-router@5.0.4/dist/vue-router.esm-browser.prod.js"
                 }
             }
         </script>
-        <script src="index.js" type="module"></script>
-        <link rel="stylesheet" href="style.css" />
+        <link rel="stylesheet" href="./style.css" />
+        <script src="./main.js" type="module"></script>
     </head>
     <body>
         <div id="app">Loading...</div>
         <template id="template">
-            <h1>Chat</h1>
-            <button v-if="!$graffitiSession.value" @click="$graffiti.login()">
-                Log In
-            </button>
-            <template v-else>
-                <button @click="$graffiti.logout($graffitiSession.value)">
-                    Log Out
-                </button>
-                <h2>{{ selectedChat.title }}</h2>
-                <form @submit.prevent="sendMessage()">
-                    <input
-                        type="text"
-                        v-model="myMessage"
-                        placeholder="Message"
-                    />
-                    <input
-                        type="submit"
-                        :value="isSending ? 'Sending...' : 'Send'"
-                        :disabled="!canSendMessage || isSending"
-                    />
-                </form>
-                <div>
-                    <h3>Create Group Chat</h3>
-                    <form @submit.prevent="newChat()">
-                        <input
-                            type="text"
-                            v-model="newChatTitle"
-                            placeholder="Group name"
-                        />
-                        <input
-                            type="submit"
-                            :value="isCreatingChat ? 'Creating...' : 'Create Group'"
-                            :disabled="!canCreateChat || isCreatingChat"
-                        />
-                    </form>
-                </div>
-                <div class="chat-list">
-                    <h3>Chats</h3>
-                    <p v-if="areChatsLoading">
-                        <em>Loading chats...</em>
-                    </p>
-                    <div v-else v-for="chat in availableChats" :key="chat.channel">
-                        <button
-                            @click="channel = chat.channel"
-                            :class="{ active: channel === chat.channel }"
-                        >
-                            {{ chat.title }}
-                        </button>
-                    </div>
-                </div>
-                <button
-                    @click="leaveChat()"
-                    :disabled="!canLeaveSelectedChat || isLeavingChat"
-                >
-                    {{ isLeavingChat ? "Leaving..." : "Leave Group" }}
-                </button>
-            </template>
-
-            <h2>Messages</h2>
-
-            <p v-if="areMessageObjectsLoading">
-                <em>Loading messages...</em>
-            </p>
-            <ul v-else>
-                <li v-for="object of sortedMessageObjects" :key="object.url">
-                    <strong>
-                        <graffiti-actor-to-handle :actor="object.actor">
-                        </graffiti-actor-to-handle> </strong
-                    >: {{ object.value.content }}
-                    <button
-                        v-if="object.actor===$graffitiSession.value?.actor"
-                        @click="deleteMessage(object)"
-                        :disabled="isDeleting.has(object.url)"
-                    >
-                        {{ isDeleting.has(object.url) ? "Deleting..." : "Delete"
-                        }}
-                    </button>
-                </li>
-            </ul>
+            <header>
+                <h1><router-link :to="`/`"> Chat App </router-link></h1>
+            </header>
+            
+            <main>
+                <router-view></router-view>
+            </main>
         </template>
     </body>
 </html>
