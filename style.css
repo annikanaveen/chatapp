@@ -74,13 +74,20 @@ input[type="submit"] {
   margin: 0.75rem 0;
 }
 
-.chat-list button {
+.chat-link {
+  display: block;
   width: 100%;
   text-align: left;
   margin-bottom: 0.35rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid #aaa;
+  border-radius: 0.25rem;
+  color: #111;
+  text-decoration: none;
+  box-sizing: border-box;
 }
 
-.chat-list button.active {
+.chat-link.active {
   font-weight: 700;
   border: 2px solid #111;
 }

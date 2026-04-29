@@ -8,6 +8,7 @@
             {
                 "imports": {
                     "vue": "https://cdn.jsdelivr.net/npm/vue@3.5.32/dist/vue.esm-browser.js",
+                    "vue-router": "https://cdn.jsdelivr.net/npm/vue-router@4/dist/vue-router.esm-browser.js",
                     "@graffiti-garden/implementation-local": "https://cdn.jsdelivr.net/npm/@graffiti-garden/implementation-local@1.2.0/dist/browser/index.js",
                     "@graffiti-garden/implementation-decentralized": "https://cdn.jsdelivr.net/npm/@graffiti-garden/implementation-decentralized@0.0.9/dist/browser/index.js",
                     "@graffiti-garden/wrapper-vue": "https://cdn.jsdelivr.net/npm/@graffiti-garden/wrapper-vue@1.2.2/dist/browser/plugin.mjs"
@@ -62,12 +63,13 @@
                         <em>Loading chats...</em>
                     </p>
                     <div v-else v-for="chat in availableChats" :key="chat.channel">
-                        <button
-                            @click="channel = chat.channel"
+                        <router-link
+                            :to="chatRoute(chat.channel)"
+                            class="chat-link"
                             :class="{ active: channel === chat.channel }"
                         >
                             {{ chat.title }}
-                        </button>
+                        </router-link>
                     </div>
                 </div>
                 <button

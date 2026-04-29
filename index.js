@@ -1,5 +1,10 @@
 import { createApp, ref, computed, watchEffect } from "vue";
-import { GraffitiLocal } from "@graffiti-garden/implementation-local";
+import {
+  createRouter,
+  createWebHashHistory,
+  useRoute,
+  useRouter,
+} from "vue-router";
 import { GraffitiDecentralized } from "@graffiti-garden/implementation-decentralized";
 import {
   GraffitiPlugin,
@@ -8,16 +13,44 @@ import {
   useGraffitiDiscover,
 } from "@graffiti-garden/wrapper-vue";
 
+const DIRECTORY_CHANNEL = "main-channel-dftw";
+const DEFAULT_CHAT_TITLE = "ALL";
+
 function setup() {
   // Initialize Graffiti
   const graffiti = useGraffiti();
   const session = useGraffitiSession();
+  const route = useRoute();
+  const router = useRouter();
 
-  const DIRECTORY_CHANNEL = "main-channel-dftw";
-  const DEFAULT_CHAT_TITLE = "ALL";
+  function normalizeChannel(channelParam) {
+    return typeof channelParam === "string" && channelParam.trim()
+      ? channelParam
+      : DIRECTORY_CHANNEL;
+  }
 
-  // This is the selected chat where messages are sent/read
-  const channel = ref(DIRECTORY_CHANNEL);
+  const channel = computed(() => {
+    return normalizeChannel(route.params.channel);
+  });
+
+  function chatRoute(chatChannel) {
+    return {
+      name: "chat",
+      params: { channel: normalizeChannel(chatChannel) },
+    };
+  }
+
+  function navigateToChat(chatChannel, options = {}) {
+    const { replace = false } = options;
+    const targetChannel = normalizeChannel(chatChannel);
+    const currentChannel = normalizeChannel(route.params.channel);
+    if (route.name === "chat" && targetChannel === currentChannel) {
+      return;
+    }
+
+    const navigate = replace ? router.replace : router.push;
+    navigate(chatRoute(targetChannel));
+  }
 
   // Declare a signal for the message entered in the chat
   const myMessage = ref("");
@@ -107,7 +140,7 @@ function setup() {
         },
         session.value,
       );
-      channel.value = createdChannel;
+      navigateToChat(createdChannel);
       newChatTitle.value = "";
     } finally {
       isCreatingChat.value = false;
@@ -207,7 +240,7 @@ function setup() {
     });
 
     if (!isCurrentChatVisible) {
-      channel.value = DIRECTORY_CHANNEL;
+      navigateToChat(DIRECTORY_CHANNEL, { replace: true });
     }
   });
 
@@ -236,7 +269,7 @@ function setup() {
         session.value,
       );
 
-      channel.value = DIRECTORY_CHANNEL;
+      navigateToChat(DIRECTORY_CHANNEL);
     } finally {
       isLeavingChat.value = false;
     }
@@ -278,14 +311,31 @@ function setup() {
     leaveChat,
     chats,
     channel,
+    chatRoute,
   };
 }
 
 const App = { template: "#template", setup };
+const Root = { template: "<router-view />" };
 
-createApp(App)
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes: [
+    {
+      path: "/",
+      redirect: { name: "chat", params: { channel: DIRECTORY_CHANNEL } },
+    },
+    { path: "/chat/:channel", name: "chat", component: App },
+    {
+      path: "/:pathMatch(.*)*",
+      redirect: { name: "chat", params: { channel: DIRECTORY_CHANNEL } },
+    },
+  ],
+});
+
+createApp(Root)
+  .use(router)
   .use(GraffitiPlugin, {
-    // graffiti: new GraffitiLocal(),
     graffiti: new GraffitiDecentralized(),
   })
   .mount("#app");
