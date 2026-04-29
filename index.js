@@ -325,12 +325,39 @@ const MessagesView = {
 };
 const RootShell = { template: "#root-template" };
 const AppRoot = { template: "<router-view />" };
-const ContactsView = {
+const FormsView = {
   template: "#placeholder-template",
   data() {
     return {
-      title: "Contacts",
-      description: "Contacts tab placeholder. We can build this next.",
+      title: "Forms",
+      description: "Forms tab placeholder. We can build this next.",
+    };
+  },
+};
+const CalendarView = {
+  template: "#placeholder-template",
+  data() {
+    return {
+      title: "Calendar",
+      description: "Calendar tab placeholder. We can build this next.",
+    };
+  },
+};
+const AttendanceView = {
+  template: "#placeholder-template",
+  data() {
+    return {
+      title: "Attendance",
+      description: "Attendance tab placeholder. We can build this next.",
+    };
+  },
+};
+const LinksView = {
+  template: "#placeholder-template",
+  data() {
+    return {
+      title: "Links",
+      description: "Links tab placeholder. We can build this next.",
     };
   },
 };
@@ -362,7 +389,10 @@ const router = createRouter({
           name: "messages-chat",
           component: MessagesView,
         },
-        { path: "contacts", name: "contacts", component: ContactsView },
+        { path: "forms", name: "forms", component: FormsView },
+        { path: "calendar", name: "calendar", component: CalendarView },
+        { path: "attendance", name: "attendance", component: AttendanceView },
+        { path: "links", name: "links", component: LinksView },
         { path: "settings", name: "settings", component: SettingsView },
       ],
     },
