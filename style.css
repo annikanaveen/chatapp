@@ -1,105 +1,54 @@
 body {
-  font-family: Arial, Helvetica, sans-serif;
-  margin: 0;
+font-family: Arial, Helvetica, sans-serif;
+margin: 0;
   padding: 1rem;
-  line-height: 1.4;
+  padding: 1rem 1rem 5.5rem;
+line-height: 1.4;
+  background: #f7f7f8;
 }
 
 #app {
-  max-width: 70rem;
-  margin: 0 auto;
+max-width: 70rem;
+margin: 0 auto;
+}
+
+.tab-content {
+  min-height: calc(100vh - 8rem);
+}
+
+.bottom-toolbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid #ddd;
+  background: #fff;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.tab-link {
+  display: block;
+  text-align: center;
+  padding: 0.85rem 0.5rem;
+  text-decoration: none;
+  color: #333;
+  font-weight: 600;
+}
+
+.tab-link.router-link-active {
+  color: #111;
+  background: #f0f0f0;
+}
+
+.placeholder-view {
+  border: 1px solid #ddd;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background: #fff;
 }
 
 .header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
-
-.header-row h1 {
-  margin: 0;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 1rem;
-  align-items: start;
-}
-
-.messages-panel,
-.sidebar-panel {
-  border: 1px solid #ddd;
-  border-radius: 0.5rem;
-  padding: 0.9rem;
-  background: #fff;
-  align-self: start;
-  margin-top: 0;
-}
-
-.sidebar-panel {
-  grid-column: 1;
-}
-
-.messages-panel {
-  grid-column: 2;
-}
-
-.messages-panel h2,
-.messages-panel h3,
-.sidebar-panel h3 {
-  margin: 0 0 0.6rem;
-}
-
-form {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-input[type="text"] {
-  flex: 1;
-  min-width: 12rem;
-  padding: 0.4rem 0.5rem;
-}
-
-button,
-input[type="submit"] {
-  padding: 0.4rem 0.65rem;
-  cursor: pointer;
-}
-
-.chat-list {
-  margin: 0.75rem 0;
-}
-
-.chat-list button {
-  width: 100%;
-  text-align: left;
-  margin-bottom: 0.35rem;
-}
-
-.chat-list button.active {
-  font-weight: 700;
-  border: 2px solid #111;
-}
-
-ul {
-  padding-left: 1rem;
-}
-
-li {
-  margin-bottom: 0.5rem;
-}
-
-@media (max-width: 780px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar-panel,
-  .messages-panel {
-    grid-column: auto;
-  }
-}
+display: flex;
+align-items: center;
