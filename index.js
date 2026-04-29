@@ -35,7 +35,7 @@ function setup() {
 
   function chatRoute(chatChannel) {
     return {
-      name: "chat",
+      name: "messages-chat",
       params: { channel: normalizeChannel(chatChannel) },
     };
   }
@@ -44,7 +44,7 @@ function setup() {
     const { replace = false } = options;
     const targetChannel = normalizeChannel(chatChannel);
     const currentChannel = normalizeChannel(route.params.channel);
-    if (route.name === "chat" && targetChannel === currentChannel) {
+    if (route.name === "messages-chat" && targetChannel === currentChannel) {
       return;
     }
 
@@ -315,25 +315,55 @@ function setup() {
   };
 }
 
-const App = { template: "#template", setup };
-const Root = { template: "<router-view />" };
+const MessagesView = { template: "#messages-template", setup };
+const RootShell = { template: "#root-template" };
+const AppRoot = { template: "<router-view />" };
+const ContactsView = {
+  template: "#placeholder-template",
+  data() {
+    return {
+      title: "Contacts",
+      description: "Contacts tab placeholder. We can build this next.",
+    };
+  },
+};
+const SettingsView = {
+  template: "#placeholder-template",
+  data() {
+    return {
+      title: "Settings",
+      description: "Settings tab placeholder. We can build this next.",
+    };
+  },
+};
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
       path: "/",
-      redirect: { name: "chat", params: { channel: DIRECTORY_CHANNEL } },
+      component: RootShell,
+      children: [
+        { path: "", redirect: { name: "messages-home" } },
+        {
+          path: "messages",
+          name: "messages-home",
+          redirect: { name: "messages-chat", params: { channel: DIRECTORY_CHANNEL } },
+        },
+        {
+          path: "messages/chat/:channel",
+          name: "messages-chat",
+          component: MessagesView,
+        },
+        { path: "contacts", name: "contacts", component: ContactsView },
+        { path: "settings", name: "settings", component: SettingsView },
+      ],
     },
-    { path: "/chat/:channel", name: "chat", component: App },
-    {
-      path: "/:pathMatch(.*)*",
-      redirect: { name: "chat", params: { channel: DIRECTORY_CHANNEL } },
-    },
+    { path: "/:pathMatch(.*)*", redirect: { name: "messages-home" } },
   ],
 });
 
-createApp(Root)
+createApp(AppRoot)
   .use(router)
   .use(GraffitiPlugin, {
     graffiti: new GraffitiDecentralized(),

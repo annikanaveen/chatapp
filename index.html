@@ -21,7 +21,17 @@
     </head>
     <body>
         <div id="app">Loading...</div>
-        <template id="template">
+        <template id="root-template">
+            <main class="tab-content">
+                <router-view />
+            </main>
+            <nav class="bottom-toolbar">
+                <router-link to="/messages" class="tab-link">Messages</router-link>
+                <router-link to="/contacts" class="tab-link">Contacts</router-link>
+                <router-link to="/settings" class="tab-link">Settings</router-link>
+            </nav>
+        </template>
+        <template id="messages-template">
             <h1>Chat</h1>
             <button v-if="!$graffitiSession.value" @click="$graffiti.login()">
                 Log In
@@ -102,6 +112,12 @@
                     </button>
                 </li>
             </ul>
+        </template>
+        <template id="placeholder-template">
+            <section class="placeholder-view">
+                <h1>{{ title }}</h1>
+                <p>{{ description }}</p>
+            </section>
         </template>
     </body>
 </html>

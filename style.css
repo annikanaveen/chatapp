@@ -1,13 +1,51 @@
 body {
   font-family: Arial, Helvetica, sans-serif;
   margin: 0;
-  padding: 1rem;
+  padding: 1rem 1rem 5.5rem;
   line-height: 1.4;
+  background: #f7f7f8;
 }
 
 #app {
   max-width: 70rem;
   margin: 0 auto;
+}
+
+.tab-content {
+  min-height: calc(100vh - 8rem);
+}
+
+.bottom-toolbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid #ddd;
+  background: #fff;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.tab-link {
+  display: block;
+  text-align: center;
+  padding: 0.85rem 0.5rem;
+  text-decoration: none;
+  color: #333;
+  font-weight: 600;
+}
+
+.tab-link.router-link-active {
+  color: #111;
+  background: #f0f0f0;
+}
+
+.placeholder-view {
+  border: 1px solid #ddd;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background: #fff;
 }
 
 .header-row {
