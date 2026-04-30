@@ -21,9 +21,25 @@ body {
   padding: 1rem;
 }
 
+#app:has(main.tab-content--thread) {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
 .tab-content {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+main.tab-content--thread {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -154,29 +170,38 @@ input[type="submit"] {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  margin: -1rem;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   padding: 0;
+  box-sizing: border-box;
   background: #f4f4f5;
 }
 
 .messages-thread-header {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 0.75rem;
+  gap: 0.4rem;
+  padding: 0.45rem 0.5rem;
   background: #fff;
   border-bottom: 1px solid #ddd;
   flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .thread-back-btn {
   font: inherit;
-  padding: 0.35rem 0.5rem;
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.45rem;
   border: 1px solid #ccc;
   border-radius: 0.35rem;
   background: #fafafa;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .thread-back-btn:hover {
@@ -185,33 +210,39 @@ input[type="submit"] {
 
 .messages-thread-title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .thread-header-actions {
-  min-width: 3.25rem;
+  min-width: 0;
   display: flex;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .thread-leave-btn {
   font: inherit;
-  padding: 0.35rem 0.45rem;
-  font-size: 0.85rem;
+  padding: 0.28rem 0.4rem;
+  font-size: 0.78rem;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .thread-login-banner {
   margin: 0;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
   background: #fff8e6;
   border-bottom: 1px solid #edd;
   flex-shrink: 0;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .thread-login-banner button {
@@ -223,9 +254,14 @@ input[type="submit"] {
 .messages-thread-scroll {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
-  padding: 0.65rem 0.75rem 1rem;
+  padding: 0.5rem 0.5rem 0.75rem;
   -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 
 .thread-loading {
@@ -239,18 +275,45 @@ input[type="submit"] {
 }
 
 .thread-messages-list li {
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.5rem;
+  min-width: 0;
 }
 
 .messages-thread-composer {
   flex-shrink: 0;
-  padding: 0.5rem 0.75rem 0.65rem;
+  padding: 0.45rem 0.5rem 0.55rem;
   background: #fff;
   border-top: 1px solid #ddd;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .messages-thread-composer form {
   margin: 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.messages-thread-composer input[type="text"] {
+  min-width: 0;
+  flex: 1 1 0;
+  max-width: 100%;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.9rem;
+}
+
+.messages-thread-composer input[type="submit"] {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
 }
 
 .bottom-toolbar {
@@ -326,54 +389,149 @@ input[type="submit"] {
   cursor: default;
 }
 
-.profile-tags-section {
+.profile-team-section {
   background: #fff;
   border: 1px solid #e2e2e4;
   border-radius: 0.75rem;
   padding: 1rem 1.1rem;
 }
 
-.profile-tags-heading {
-  margin: 0 0 0.35rem;
+.profile-team-heading {
+  margin: 0;
   font-size: 1.05rem;
 }
 
-.profile-tags-intro {
-  margin: 0 0 0.85rem;
-  font-size: 0.88rem;
-  color: #555;
+.profile-team-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
 }
 
-.profile-tags-list {
-  list-style: none;
-  padding: 0;
+.profile-edit-btn {
+  font: inherit;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+  border-radius: 0.35rem;
+  border: 1px solid #888;
+  background: #fafafa;
+}
+
+.profile-edit-btn:hover {
+  background: #eee;
+}
+
+.profile-pending-banner {
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.88rem;
+  background: #fff8e6;
+  border: 1px solid #e6d9a8;
+  border-radius: 0.4rem;
+  color: #4a3d10;
+}
+
+.profile-meta-dl {
   margin: 0;
 }
 
-.profile-tag-row {
+.profile-meta-row {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  align-items: flex-start;
+  gap: 0.2rem;
   padding: 0.55rem 0;
-  margin: 0;
   border-bottom: 1px solid #eee;
 }
 
-.profile-tag-row:last-child {
+.profile-meta-row:last-child {
   border-bottom: none;
-  padding-bottom: 0;
 }
 
-.profile-tag-label {
+.profile-meta-row dt {
+  margin: 0;
   font-size: 0.78rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   color: #666;
 }
 
-.profile-tag-value {
-  font-size: 0.98rem;
+.profile-meta-row dd {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
   color: #111;
+}
+
+.profile-edit-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.profile-fieldset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 0.45rem;
+  min-width: 0;
+}
+
+.profile-legend {
+  padding: 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.profile-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.35rem 0;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.profile-approval-note {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #555;
+}
+
+.profile-form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.profile-save-btn,
+.profile-cancel-btn {
+  font: inherit;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  border-radius: 0.35rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.profile-save-btn {
+  border: 1px solid #1a5f1a;
+  background: #e8f5e8;
+  color: #0d3d0d;
+}
+
+.profile-cancel-btn {
+  border: 1px solid #bbb;
+  background: #fff;
 }
 
 ul {

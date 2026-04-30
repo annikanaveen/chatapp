@@ -1,0 +1,35 @@
+<section class="messages-directory">
+    <h1>Chats</h1>
+    <button v-if="!$graffitiSession.value" @click="$graffiti.login()">Log In</button>
+    <template v-else>
+        <div class="directory-toolbar">
+            <button type="button" @click="$graffiti.logout($graffitiSession.value)">
+                Log Out
+            </button>
+        </div>
+        <div class="create-chat-block">
+            <h2>Create group chat</h2>
+            <form @submit.prevent="newChat()">
+                <input type="text" v-model="newChatTitle" placeholder="Group name" />
+                <input
+                    type="submit"
+                    :value="isCreatingChat ? 'Creating...' : 'Create group'"
+                    :disabled="!canCreateChat || isCreatingChat"
+                />
+            </form>
+        </div>
+        <div class="chat-list">
+            <h2>Your chats</h2>
+            <p v-if="areChatsLoading"><em>Loading chats...</em></p>
+            <div v-else v-for="chat in availableChats" :key="chat.channel">
+                <router-link
+                    :to="chatRoute(chat.channel)"
+                    class="chat-link chat-link-row"
+                >
+                    <span class="chat-link-title">{{ chat.title }}</span>
+                    <span class="chat-link-chevron" aria-hidden="true">›</span>
+                </router-link>
+            </div>
+        </div>
+    </template>
+</section>

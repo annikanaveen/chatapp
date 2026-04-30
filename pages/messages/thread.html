@@ -1,0 +1,67 @@
+<section class="messages-thread-screen">
+    <header class="messages-thread-header">
+        <button type="button" class="thread-back-btn" @click="goToChannelList()">
+            ← Chats
+        </button>
+        <h1 class="messages-thread-title">{{ selectedChat.title }}</h1>
+        <div class="thread-header-actions">
+            <button
+                v-if="$graffitiSession.value && canLeaveSelectedChat"
+                type="button"
+                class="thread-leave-btn"
+                @click="leaveChat()"
+                :disabled="isLeavingChat"
+            >
+                {{ isLeavingChat ? "…" : "Leave" }}
+            </button>
+        </div>
+    </header>
+
+    <p v-if="!$graffitiSession.value" class="thread-login-banner">
+        <button type="button" @click="$graffiti.login()">Log in</button>
+        to send messages in this chat.
+    </p>
+    <div ref="messageScrollEl" class="messages-thread-scroll">
+        <p v-if="areMessageObjectsLoading" class="thread-loading">
+            <em>Loading messages…</em>
+        </p>
+        <ul v-else class="messages-list thread-messages-list">
+            <li v-for="object of sortedMessageObjects" :key="object.url">
+                <message-bubble
+                    :actor="object.actor"
+                    :content="object.value.content"
+                    :published="object.value.published"
+                    :session-actor="$graffitiSession.value?.actor"
+                >
+                    <template #actions>
+                        <button
+                            v-if="$graffitiSession.value && object.actor===$graffitiSession.value?.actor"
+                            type="button"
+                            @click="deleteMessage(object)"
+                            :disabled="isDeleting.has(object.url)"
+                        >
+                            {{
+                                isDeleting.has(object.url) ? "Deleting…" : "Delete"
+                            }}
+                        </button>
+                    </template>
+                </message-bubble>
+            </li>
+        </ul>
+    </div>
+    <footer v-if="$graffitiSession.value" class="messages-thread-composer">
+        <form @submit.prevent="sendMessage()">
+            <input
+                type="text"
+                v-model="myMessage"
+                placeholder="Message"
+                autocomplete="off"
+            />
+            <input
+                type="submit"
+                :value="isSending ? 'Sending…' : 'Send'"
+                :disabled="!canSendMessage || isSending"
+            />
+        </form>
+    </footer>
+</section>

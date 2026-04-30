@@ -1,0 +1,117 @@
+<section class="profile-view">
+    <h1 class="profile-page-title">Profile</h1>
+
+    <p v-if="$graffitiSession.value === undefined" class="profile-loading">
+        <em>Loading session…</em>
+    </p>
+
+    <div v-else-if="$graffitiSession.value === null" class="profile-guest">
+        <p>Log in to see your profile and team tags.</p>
+        <button type="button" @click="$graffiti.login()">Log in</button>
+    </div>
+
+    <template v-else>
+        <div class="profile-card">
+            <div
+                class="profile-avatar"
+                role="img"
+                aria-label="Profile photo (not set)"
+            ></div>
+            <p
+                class="profile-handle-short"
+                :title="handleFull || undefined"
+                translate="no"
+            >
+                {{ handleDisplay }}
+            </p>
+        </div>
+
+        <section class="profile-team-section" aria-labelledby="team-heading">
+            <div class="profile-team-header">
+                <h2 id="team-heading" class="profile-team-heading">Team</h2>
+                <button
+                    v-if="!editing"
+                    type="button"
+                    class="profile-edit-btn"
+                    @click="startEdit"
+                >
+                    Edit
+                </button>
+            </div>
+
+            <p v-if="saved.pendingApproval" class="profile-pending-banner" role="status">
+                Your latest changes are pending until approved by a coach.
+            </p>
+
+            <template v-if="!editing">
+                <dl class="profile-meta-dl">
+                    <div class="profile-meta-row">
+                        <dt>Role</dt>
+                        <dd>{{ roleDisplay }}</dd>
+                    </div>
+                    <template v-if="saved.role === 'athlete'">
+                        <div class="profile-meta-row">
+                            <dt>Sport</dt>
+                            <dd>{{ sportDisplay }}</dd>
+                        </div>
+                        <div class="profile-meta-row">
+                            <dt>Team</dt>
+                            <dd>{{ teamDisplay }}</dd>
+                        </div>
+                    </template>
+                </dl>
+            </template>
+
+            <form v-else class="profile-edit-form" @submit.prevent="saveEdit">
+                <fieldset class="profile-fieldset">
+                    <legend class="profile-legend">Role</legend>
+                    <label class="profile-radio-label">
+                        <input type="radio" value="athlete" v-model="draft.role" />
+                        Athlete
+                    </label>
+                    <label class="profile-radio-label">
+                        <input type="radio" value="coach" v-model="draft.role" />
+                        Coach
+                    </label>
+                </fieldset>
+
+                <fieldset v-if="draft.role === 'athlete'" class="profile-fieldset">
+                    <legend class="profile-legend">Sport</legend>
+                    <label class="profile-radio-label">
+                        <input type="radio" value="swimmer" v-model="draft.sport" />
+                        Swimmer
+                    </label>
+                    <label class="profile-radio-label">
+                        <input type="radio" value="diver" v-model="draft.sport" />
+                        Diver
+                    </label>
+                </fieldset>
+
+                <fieldset v-if="draft.role === 'athlete'" class="profile-fieldset">
+                    <legend class="profile-legend">Team</legend>
+                    <label class="profile-radio-label">
+                        <input type="radio" value="women" v-model="draft.team" />
+                        Women
+                    </label>
+                    <label class="profile-radio-label">
+                        <input type="radio" value="men" v-model="draft.team" />
+                        Men
+                    </label>
+                </fieldset>
+
+                <p class="profile-approval-note">
+                    Your updates are saved as a request. They stay
+                    <strong>pending until a coach approves</strong> them; until then,
+                    teammates may still see your previous approved role.
+                </p>
+
+                <div class="profile-form-actions">
+                    <button type="submit" class="profile-save-btn">Save</button>
+                    <button type="button" class="profile-cancel-btn" @click="cancelEdit">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </section>
+    </template>
+</section>

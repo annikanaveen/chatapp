@@ -54,7 +54,25 @@ const MessageBubble = {
       if (handle === null) {
         return "Unknown user";
       }
-      return String(handle).replace(/^graffiti\.actor[.:/-]?/, "");
+      let text = String(handle).trim();
+      try {
+        if (/^https?:\/\//iu.test(text)) {
+          text = new URL(text).hostname;
+        }
+      } catch {
+        // keep text as-is
+      }
+      text = text.replace(/^graffiti\.actor[.:/-]?/iu, "");
+      const hostMarker = ".graffiti.actor";
+      const markerAt = text.toLowerCase().indexOf(hostMarker);
+      if (markerAt > 0) {
+        return text.slice(0, markerAt);
+      }
+      const firstDot = text.indexOf(".");
+      if (firstDot > 0) {
+        return text.slice(0, firstDot);
+      }
+      return text || "Unknown user";
     }
 
     const timestampDate = new Date(props.published);
