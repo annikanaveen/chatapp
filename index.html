@@ -31,7 +31,7 @@
                 <router-link to="/calendar" class="tab-link">Calendar</router-link>
                 <router-link to="/attendance" class="tab-link">Attendance</router-link>
                 <router-link to="/links" class="tab-link">Links</router-link>
-                <router-link to="/settings" class="tab-link">Settings</router-link>
+                <router-link to="/profile" class="tab-link">Profile</router-link>
             </nav>
         </template>
         <template id="messages-directory-template">
@@ -167,6 +167,53 @@
             <section class="placeholder-view">
                 <h1>{{ title }}</h1>
                 <p>{{ description }}</p>
+            </section>
+        </template>
+        <template id="profile-template">
+            <section class="profile-view">
+                <h1 class="profile-page-title">Profile</h1>
+
+                <p v-if="$graffitiSession.value === undefined" class="profile-loading">
+                    <em>Loading session…</em>
+                </p>
+
+                <div
+                    v-else-if="$graffitiSession.value === null"
+                    class="profile-guest"
+                >
+                    <p>Log in to see your profile and tags.</p>
+                    <button type="button" @click="$graffiti.login()">Log in</button>
+                </div>
+
+                <template v-else>
+                    <div class="profile-card">
+                        <div
+                            class="profile-avatar"
+                            role="img"
+                            aria-label="Profile photo (not set)"
+                        ></div>
+                        <p
+                            class="profile-handle-short"
+                            :title="handleFull || undefined"
+                            translate="no"
+                        >
+                            {{ handleDisplay }}
+                        </p>
+                    </div>
+
+                    <section class="profile-tags-section" aria-labelledby="tags-heading">
+                        <h2 id="tags-heading" class="profile-tags-heading">Tags</h2>
+                        <p class="profile-tags-intro">
+                            What your roles are on the team.
+                        </p>
+                        <ul class="profile-tags-list">
+                            <li v-for="tag in profileTags" :key="tag.id" class="profile-tag-row">
+                                <span class="profile-tag-label">{{ tag.category }}</span>
+                                <span class="profile-tag-value">{{ tag.choice }}</span>
+                            </li>
+                        </ul>
+                    </section>
+                </template>
             </section>
         </template>
     </body>

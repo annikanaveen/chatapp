@@ -273,6 +273,109 @@ input[type="submit"] {
   background: #eef;
 }
 
+.profile-view {
+  max-width: 26rem;
+  margin: 0 auto;
+  padding-bottom: 1rem;
+}
+
+.profile-page-title {
+  margin: 0 0 1rem;
+  font-size: 1.35rem;
+}
+
+.profile-guest {
+  padding: 1rem 0;
+}
+
+.profile-loading {
+  margin: 0.5rem 0 1rem;
+}
+
+.profile-guest button {
+  margin-top: 0.5rem;
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1.25rem 1rem;
+  margin-bottom: 1.5rem;
+  background: #fff;
+  border: 1px solid #e2e2e4;
+  border-radius: 0.75rem;
+}
+
+.profile-avatar {
+  width: 6.5rem;
+  height: 6.5rem;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #e8e8ec 0%, #d4d4da 100%);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #ccc;
+  margin-bottom: 1rem;
+}
+
+.profile-handle-short {
+  margin: 0 0 0.75rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  cursor: default;
+}
+
+.profile-tags-section {
+  background: #fff;
+  border: 1px solid #e2e2e4;
+  border-radius: 0.75rem;
+  padding: 1rem 1.1rem;
+}
+
+.profile-tags-heading {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.profile-tags-intro {
+  margin: 0 0 0.85rem;
+  font-size: 0.88rem;
+  color: #555;
+}
+
+.profile-tags-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.profile-tag-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0;
+  margin: 0;
+  border-bottom: 1px solid #eee;
+}
+
+.profile-tag-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.profile-tag-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #666;
+}
+
+.profile-tag-value {
+  font-size: 0.98rem;
+  color: #111;
+}
+
 ul {
   padding-left: 1rem;
 }

@@ -11,6 +11,7 @@ import {
   useGraffiti,
   useGraffitiSession,
   useGraffitiDiscover,
+  useGraffitiActorToHandle,
 } from "@graffiti-garden/wrapper-vue";
 import { MessageBubble } from "./components/message/message.js";
 
@@ -490,14 +491,68 @@ const LinksView = {
     };
   },
 };
-const SettingsView = {
-  template: "#placeholder-template",
-  data() {
-    return {
-      title: "Settings",
-      description: "Settings tab placeholder. We can build this next.",
-    };
-  },
+
+function clipHandleToShortLabel(handle) {
+  if (handle === undefined || handle === null) {
+    return null;
+  }
+  const trimmed = String(handle).trim();
+  if (!trimmed) {
+    return "";
+  }
+  const dot = trimmed.indexOf(".");
+  if (dot === -1) {
+    return trimmed;
+  }
+  return trimmed.slice(0, dot) || trimmed;
+}
+
+function profileSetup() {
+  const session = useGraffitiSession();
+
+  const { handle: graffitiHandle } = useGraffitiActorToHandle(
+    () => session.value?.actor,
+  );
+
+  const handleFull = computed(() => {
+    const handle = graffitiHandle.value;
+    if (handle === undefined) {
+      return "";
+    }
+    if (handle === null) {
+      return "";
+    }
+    return String(handle);
+  });
+
+  const handleDisplay = computed(() => {
+    const handle = graffitiHandle.value;
+    if (handle === undefined) {
+      return "…";
+    }
+    if (handle === null) {
+      return "—";
+    }
+    const short = clipHandleToShortLabel(handle);
+    return short || "—";
+  });
+
+  const profileTags = [
+    { id: "aquatic", category: "Aquatic sport", choice: "Swimmer (not diver)" },
+    { id: "role", category: "Team role", choice: "Athlete (not coach)" },
+    { id: "season", category: "Season", choice: "Spring roster" },
+  ];
+
+  return {
+    handleDisplay,
+    handleFull,
+    profileTags,
+  };
+}
+
+const ProfileView = {
+  template: "#profile-template",
+  setup: profileSetup,
 };
 
 const router = createRouter({
@@ -523,7 +578,15 @@ const router = createRouter({
         { path: "calendar", name: "calendar", component: CalendarView },
         { path: "attendance", name: "attendance", component: AttendanceView },
         { path: "links", name: "links", component: LinksView },
-        { path: "settings", name: "settings", component: SettingsView },
+        {
+          path: "profile",
+          name: "profile",
+          component: ProfileView,
+        },
+        {
+          path: "settings",
+          redirect: { name: "profile" },
+        },
       ],
     },
     { path: "/:pathMatch(.*)*", redirect: { name: "messages-directory" } },
