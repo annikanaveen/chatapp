@@ -1,4 +1,155 @@
-<section class="placeholder-view">
-    <h1>{{ title }}</h1>
-    <p>{{ description }}</p>
+<section class="links-view">
+    <header class="links-header">
+        <div class="links-title-stack">
+            <h1 class="links-title">Links</h1>
+            <p class="links-subtitle">
+                Add sections and links—each link needs a label; click to open or copy the URL.
+            </p>
+        </div>
+        <button
+            type="button"
+            class="links-add-section-btn"
+            @click="addSection()"
+            :disabled="!$graffitiSession.value || areLinksBoardLoading || isSavingLinks"
+        >
+            {{ isSavingLinks ? "Saving…" : "+ Add section" }}
+        </button>
+    </header>
+
+    <p v-if="!$graffitiSession.value" class="links-login-banner">
+        <button type="button" @click="$graffiti.login()">Log in</button>
+        to view and edit links shared with everyone.
+    </p>
+    <p v-else-if="areLinksBoardLoading" class="links-loading"><em>Loading shared links…</em></p>
+
+    <p
+        v-if="$graffitiSession.value && !areLinksBoardLoading && state.sections.length === 0"
+        class="links-empty"
+    >
+        No sections yet. Click <strong>Add section</strong> to get started.
+    </p>
+
+    <div v-else-if="$graffitiSession.value && !areLinksBoardLoading" class="links-sections" role="list">
+        <section v-for="section of state.sections" :key="section.id" class="links-section-card" role="listitem">
+            <header class="links-section-header">
+                <div class="links-section-title-area">
+                    <template v-if="renamingSectionId === section.id">
+                        <div class="links-section-rename-row">
+                            <input
+                                :id="'links-rename-' + section.id"
+                                class="links-section-title-input"
+                                type="text"
+                                v-model="renameDraft"
+                                aria-label="Section title"
+                                :disabled="isSavingLinks"
+                                @keydown.enter.prevent="commitRenameSection(section.id)"
+                                @keydown.esc.prevent="cancelRenameSection()"
+                                @blur="commitRenameSection(section.id)"
+                            />
+                            <button
+                                type="button"
+                                class="links-section-save-btn"
+                                :disabled="isSavingLinks"
+                                @mousedown.prevent
+                                @click="commitRenameSection(section.id)"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </template>
+                    <template v-else>
+                        <h2 class="links-section-title-display">{{ section.title }}</h2>
+                        <button
+                            type="button"
+                            class="links-section-rename-btn"
+                            title="Rename section"
+                            aria-label="Rename section"
+                            :disabled="isSavingLinks"
+                            @click="startRenameSection(section)"
+                        >
+                            <svg
+                                class="links-icon-pencil"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                            </svg>
+                        </button>
+                    </template>
+                </div>
+                <button
+                    type="button"
+                    class="links-section-remove-btn"
+                    title="Remove section"
+                    :disabled="isSavingLinks"
+                    @click="removeSection(section.id)"
+                >
+                    ✕
+                </button>
+            </header>
+
+            <ul v-if="section.links && section.links.length > 0" class="links-list">
+                <li v-for="link of section.links" :key="link.id" class="links-row">
+                    <a
+                        class="links-anchor"
+                        :href="link.url"
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        :title="'Open ' + link.url"
+                    >
+                        {{ link.label }}
+                    </a>
+                    <div class="links-row-actions">
+                        <button
+                            type="button"
+                            class="links-copy-btn"
+                            :aria-label="'Copy URL for ' + link.label"
+                            @click="copyLinkUrl(link.url, link.id)"
+                        >
+                            {{ copiedLinkId === link.id ? "Copied!" : "Copy Link" }}
+                        </button>
+                        <button
+                            type="button"
+                            class="delete-action-btn attendance-card-delete-btn"
+                            title="Delete link"
+                            :disabled="isSavingLinks"
+                            @click="removeLink(section.id, link.id)"
+                        >
+                            Delete
+                        </button>
+                    </div>
+                </li>
+            </ul>
+            <p v-else class="links-list-empty">No links in this section yet.</p>
+
+            <form class="links-add-link-form" @submit.prevent="addLink(section.id)">
+                <input
+                    type="text"
+                    :value="draftLinkLabelBySectionId[section.id] || ''"
+                    @input="draftLinkLabelBySectionId = { ...draftLinkLabelBySectionId, [section.id]: $event.target.value }"
+                    placeholder="Label (required)"
+                    autocomplete="off"
+                    aria-required="true"
+                    :disabled="isSavingLinks"
+                />
+                <input
+                    type="text"
+                    :value="draftLinkUrlBySectionId[section.id] || ''"
+                    @input="draftLinkUrlBySectionId = { ...draftLinkUrlBySectionId, [section.id]: $event.target.value }"
+                    placeholder="https://example.com"
+                    autocomplete="off"
+                    :disabled="isSavingLinks"
+                />
+                <input type="submit" value="Add link" :disabled="isSavingLinks" />
+            </form>
+        </section>
+    </div>
 </section>

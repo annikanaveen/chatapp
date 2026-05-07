@@ -1,4 +1,315 @@
-<section class="placeholder-view">
-    <h1>{{ title }}</h1>
-    <p>{{ description }}</p>
+<section class="calendar-view">
+    <header class="links-header">
+        <div class="links-title-stack">
+            <h1 class="links-title">Calendar</h1>
+            <p class="links-subtitle">
+                Click an event for details. With no invitees, only you can see the event; add names to share it with those people.
+            </p>
+        </div>
+        <button
+            type="button"
+            class="links-add-section-btn"
+            @click="openAddEventModal()"
+            :disabled="!$graffitiSession.value || areCalendarEventsLoading || isAnyCalendarSaving"
+        >
+            {{ isPostingEvent ? "Saving…" : "+ Add event" }}
+        </button>
+    </header>
+
+    <p v-if="!$graffitiSession.value" class="links-login-banner">
+        <button type="button" @click="$graffiti.login()">Log in</button>
+        to view events shared with you and create new ones.
+    </p>
+
+    <template v-else>
+        <p v-if="areCalendarEventsLoading" class="links-loading"><em>Loading events…</em></p>
+
+        <div v-else class="calendar-panel">
+            <div class="calendar-nav">
+                <button type="button" class="calendar-nav-btn calendar-nav-prev" @click="prevMonth()" aria-label="Previous month">
+                    ‹
+                </button>
+                <h2 class="calendar-month-label">{{ monthLabel }}</h2>
+                <div class="calendar-nav-end">
+                    <button type="button" class="calendar-nav-btn" @click="nextMonth()" aria-label="Next month">
+                        ›
+                    </button>
+                </div>
+            </div>
+
+            <div class="calendar-weekday-row" aria-hidden="true">
+                <span v-for="w in weekdayLabels" :key="w" class="calendar-weekday">{{ w }}</span>
+            </div>
+
+            <div class="calendar-grid-body">
+            <div class="calendar-grid" role="grid" :aria-label="monthLabel">
+                <div
+                    v-for="cell in calendarCells"
+                    :key="cell.iso"
+                    class="calendar-cell"
+                    :class="{
+                        'calendar-cell--outside': !cell.inCurrentMonth,
+                        'calendar-cell--today': cell.isToday,
+                    }"
+                    role="gridcell"
+                    :aria-current="cell.isToday ? 'date' : undefined"
+                    @click.self="openAddEventModal(cell.iso)"
+                >
+                    <button
+                        type="button"
+                        class="calendar-day-num-btn"
+                        @click.stop="openAddEventModal(cell.iso)"
+                    >
+                        {{ cell.dayOfMonth }}
+                    </button>
+                    <div class="calendar-cell-events">
+                        <button
+                            v-for="obj in eventsOnDay(cell.iso)"
+                            :key="obj.url"
+                            type="button"
+                            class="calendar-event-card calendar-event-card--btn calendar-event-card--line"
+                            @click.stop="openEventDetail(obj)"
+                        >
+                            <span class="calendar-event-row">
+                                <span class="calendar-event-title-text">{{ obj.value.title }}</span>
+                                <span v-if="obj.value.time" class="calendar-event-time-compact">{{
+                                    formatTime12h(obj.value.time)
+                                }}</span>
+                                <span class="calendar-event-suffix">{{ calendarEventSuffix(obj) }}</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            </div>
+
+            <div class="calendar-panel-footer">
+                <button type="button" class="calendar-today-btn" @click="goToThisMonth()">Jump to current</button>
+            </div>
+        </div>
+    </template>
+
+    <!-- Add / create -->
+    <div
+        v-if="isAddEventOpen && $graffitiSession.value"
+        class="create-chat-modal-overlay"
+        role="presentation"
+    >
+        <div class="create-chat-modal-backdrop" @click="closeAddEventModal()"></div>
+        <div
+            class="create-chat-modal calendar-event-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="calendar-event-modal-title"
+            @click.stop
+        >
+            <div class="create-chat-modal-header">
+                <h2 id="calendar-event-modal-title">New event</h2>
+                <button
+                    type="button"
+                    class="create-chat-modal-close"
+                    :disabled="isPostingEvent"
+                    @click="closeAddEventModal()"
+                    aria-label="Close"
+                >
+                    ×
+                </button>
+            </div>
+            <p class="create-chat-invite-hint">
+                Leave invite blank to keep the event private to you. Add Graffiti usernames (comma-separated) to invite others.
+            </p>
+            <form class="calendar-event-form" @submit.prevent="submitNewEvent()">
+                <label class="calendar-field">
+                    <span>Title</span>
+                    <input
+                        type="text"
+                        v-model="newEventTitle"
+                        placeholder="Meeting title"
+                        autocomplete="off"
+                        required
+                    />
+                </label>
+                <label class="calendar-field">
+                    <span>Details <span class="calendar-optional">(optional)</span></span>
+                    <textarea
+                        v-model="newEventDetails"
+                        class="calendar-textarea"
+                        rows="4"
+                        placeholder="Notes, location, agenda…"
+                    ></textarea>
+                </label>
+                <label class="calendar-field">
+                    <span>Date</span>
+                    <input type="date" v-model="newEventDate" required />
+                </label>
+                <label class="calendar-field">
+                    <span>Time <span class="calendar-optional">(optional)</span></span>
+                    <input type="time" v-model="newEventTime" />
+                </label>
+                <label class="calendar-field">
+                    <span>Invite <span class="calendar-optional">(optional)</span></span>
+                    <input
+                        type="text"
+                        v-model="newEventInviteHandles"
+                        placeholder="Usernames, separated by commas"
+                        autocomplete="off"
+                    />
+                </label>
+                <p v-if="eventCreateError" class="create-chat-error">{{ eventCreateError }}</p>
+                <div class="create-chat-modal-actions">
+                    <button
+                        type="button"
+                        class="create-chat-cancel-btn"
+                        :disabled="isPostingEvent"
+                        @click="closeAddEventModal()"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        class="calendar-submit-btn calendar-detail-save"
+                        :disabled="isPostingEvent"
+                    >
+                        {{ isPostingEvent ? "Saving…" : "Save" }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Detail / edit -->
+    <div
+        v-if="isEventDetailOpen && detailEventObject && $graffitiSession.value"
+        class="create-chat-modal-overlay calendar-detail-overlay"
+        role="presentation"
+    >
+        <div class="create-chat-modal-backdrop" @click="closeEventDetail()"></div>
+        <div
+            class="create-chat-modal calendar-event-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="calendar-detail-title"
+            @click.stop
+        >
+            <div class="create-chat-modal-header">
+                <h2 id="calendar-detail-title" class="calendar-detail-modal-title">
+                    {{ isEditingDetail ? "Edit event" : selectedEventValue?.title }}
+                </h2>
+                <button
+                    type="button"
+                    class="create-chat-modal-close"
+                    :disabled="isSavingDetail"
+                    @click="closeEventDetail()"
+                    aria-label="Close"
+                >
+                    ×
+                </button>
+            </div>
+
+            <template v-if="!isEditingDetail && selectedEventValue">
+                <div class="calendar-detail-body">
+                    <p v-if="selectedEventValue.details" class="calendar-detail-text">{{ selectedEventValue.details }}</p>
+                    <p v-else class="calendar-detail-empty">No details.</p>
+
+                    <dl class="calendar-detail-meta">
+                        <div class="calendar-detail-meta-row">
+                            <dt>Date</dt>
+                            <dd>{{ selectedEventValue.date }}</dd>
+                        </div>
+                        <div v-if="selectedEventValue.time" class="calendar-detail-meta-row">
+                            <dt>Time</dt>
+                            <dd>{{ formatTime12h(selectedEventValue.time) }}</dd>
+                        </div>
+                        <div class="calendar-detail-meta-row">
+                            <dt>Who can see this</dt>
+                            <dd>
+                                <template v-if="!eventIsRestricted(selectedEventValue)">
+                                    Everyone (open event)
+                                </template>
+                                <template v-else>
+                                    <span
+                                        v-for="actor in inviteActorsForDisplay(detailEventObject)"
+                                        :key="'inv-' + actor"
+                                        class="calendar-detail-invite"
+                                    >
+                                        <member-handle :actor="actor" />
+                                    </span>
+                                    <span
+                                        v-if="inviteActorsForDisplay(detailEventObject).length === 0"
+                                        class="calendar-detail-empty-inline"
+                                        >Only you (organizer)</span>
+                                </template>
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <div class="calendar-detail-actions">
+                    <button
+                        v-if="canEditEvent(detailEventObject)"
+                        type="button"
+                        class="delete-action-btn"
+                        :disabled="deletingUrl !== null"
+                        @click="confirmDeleteDetail()"
+                    >
+                        Delete
+                    </button>
+                    <button
+                        v-if="canEditEvent(detailEventObject)"
+                        type="button"
+                        class="calendar-submit-btn calendar-detail-edit"
+                        @click="startEditDetail()"
+                    >
+                        Edit
+                    </button>
+                </div>
+            </template>
+
+            <form v-else class="calendar-event-form" @submit.prevent="saveDetailEdit()">
+                <label class="calendar-field">
+                    <span>Title</span>
+                    <input type="text" v-model="editTitle" required autocomplete="off" />
+                </label>
+                <label class="calendar-field">
+                    <span>Details <span class="calendar-optional">(optional)</span></span>
+                    <textarea v-model="editDetails" class="calendar-textarea" rows="4" placeholder="Notes, location, agenda…"></textarea>
+                </label>
+                <label class="calendar-field">
+                    <span>Date</span>
+                    <input type="date" v-model="editDate" required />
+                </label>
+                <label class="calendar-field">
+                    <span>Time <span class="calendar-optional">(optional)</span></span>
+                    <input type="time" v-model="editTime" />
+                </label>
+                <label class="calendar-field">
+                    <span>Invite <span class="calendar-optional">(optional)</span></span>
+                    <input
+                        type="text"
+                        v-model="editInviteHandles"
+                        placeholder="Usernames, separated by commas"
+                        autocomplete="off"
+                    />
+                </label>
+                <p v-if="detailError" class="create-chat-error">{{ detailError }}</p>
+                <div class="create-chat-modal-actions">
+                    <button
+                        type="button"
+                        class="create-chat-cancel-btn"
+                        :disabled="isSavingDetail"
+                        @click="cancelEditDetail()"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        class="calendar-submit-btn calendar-detail-save"
+                        :disabled="isSavingDetail"
+                    >
+                        {{ isSavingDetail ? "Saving…" : "Save" }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </section>

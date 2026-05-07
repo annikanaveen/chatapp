@@ -3,14 +3,57 @@
         <button type="button" class="thread-back-btn" @click="goToChannelList()">
             ← Chats
         </button>
-        <h1 class="messages-thread-title">{{ selectedChat.title }}</h1>
+        <div class="thread-title-stack">
+            <h1 class="messages-thread-title">{{ selectedChat.title }}</h1>
+            <div v-if="isPrivateGroupChat" class="thread-members-compact" role="group" aria-label="Chat members">
+                <div class="thread-members-avatars" aria-hidden="true">
+                    <span
+                        v-for="m of compactMembers"
+                        :key="m.actor"
+                        class="thread-member-avatar thread-member-avatar--sm"
+                        :style="{ '--member-hue': m.hue }"
+                        :title="m.label"
+                    >
+                        {{ m.initials }}
+                    </span>
+                </div>
+                <p class="thread-members-label">
+                    <span class="thread-members-label-prefix">Members:</span>
+                    <span class="thread-members-label-names">
+                        <template v-for="(m, idx) of compactMembers" :key="m.actor">
+                            <member-handle :actor="m.actor" :fallback="m.label" />
+                            <span v-if="idx < compactMembers.length - 1">, </span>
+                        </template>
+                        <span v-if="remainingMemberCount > 0"> +{{ remainingMemberCount }}</span>
+                    </span>
+                </p>
+                <button
+                    type="button"
+                    class="thread-members-viewall-btn"
+                    @click="toggleMembersPanel()"
+                    :aria-expanded="isMembersPanelOpen ? 'true' : 'false'"
+                    aria-controls="thread-members-panel"
+                >
+                    {{ isMembersPanelOpen ? "Hide" : "View all" }}
+                </button>
+            </div>
+        </div>
         <div class="thread-header-actions">
+            <button
+                v-if="$graffitiSession.value && canDeleteEntireChat"
+                type="button"
+                class="thread-delete-chat-btn"
+                @click="deleteEntireChat()"
+                :disabled="isDeletingChat || isLeavingChat"
+            >
+                {{ isDeletingChat ? "…" : "Delete chat" }}
+            </button>
             <button
                 v-if="$graffitiSession.value && canLeaveSelectedChat"
                 type="button"
                 class="thread-leave-btn"
                 @click="leaveChat()"
-                :disabled="isLeavingChat"
+                :disabled="isLeavingChat || isDeletingChat"
             >
                 {{ isLeavingChat ? "…" : "Leave" }}
             </button>
@@ -21,47 +64,90 @@
         <button type="button" @click="$graffiti.login()">Log in</button>
         to send messages in this chat.
     </p>
-    <div ref="messageScrollEl" class="messages-thread-scroll">
-        <p v-if="areMessageObjectsLoading" class="thread-loading">
-            <em>Loading messages…</em>
-        </p>
-        <ul v-else class="messages-list thread-messages-list">
-            <li v-for="object of sortedMessageObjects" :key="object.url">
-                <message-bubble
-                    :actor="object.actor"
-                    :content="object.value.content"
-                    :published="object.value.published"
-                    :session-actor="$graffitiSession.value?.actor"
+    <div class="messages-thread-split" :class="{ 'messages-thread-split--members-open': isMembersPanelOpen }">
+        <div class="messages-thread-maincol">
+            <div ref="messageScrollEl" class="messages-thread-scroll">
+                <p
+                    v-if="areMessageObjectsLoading || areLeaveObjectsLoading || areDeleteObjectsLoading"
+                    class="thread-loading"
                 >
-                    <template #actions>
-                        <button
-                            v-if="$graffitiSession.value && object.actor===$graffitiSession.value?.actor"
-                            type="button"
-                            @click="deleteMessage(object)"
-                            :disabled="isDeleting.has(object.url)"
+                    <em>Loading messages…</em>
+                </p>
+                <ul v-else class="messages-list thread-messages-list">
+                    <li v-for="item of threadTimeline" :key="item.kind + '-' + item.object.url">
+                        <message-bubble
+                            v-if="item.kind === 'message'"
+                            :actor="item.object.actor"
+                            :content="item.object.value.content"
+                            :published="item.object.value.published"
+                            :session-actor="$graffitiSession.value?.actor"
                         >
-                            {{
-                                isDeleting.has(object.url) ? "Deleting…" : "Delete"
-                            }}
-                        </button>
-                    </template>
-                </message-bubble>
-            </li>
-        </ul>
+                            <template #actions>
+                                <button
+                                    v-if="$graffitiSession.value && item.object.actor===$graffitiSession.value?.actor"
+                                    type="button"
+                                    class="delete-action-btn"
+                                    @click="deleteMessage(item.object)"
+                                    :disabled="isDeleting.has(item.object.url)"
+                                >
+                                    {{ isDeleting.has(item.object.url) ? "Deleting…" : "Delete" }}
+                                </button>
+                            </template>
+                        </message-bubble>
+                        <leave-notice
+                            v-else-if="item.kind === 'leave'"
+                            :actor="item.object.actor"
+                            :published="item.object.value.published"
+                        />
+                    </li>
+                </ul>
+            </div>
+            <footer v-if="$graffitiSession.value" class="messages-thread-composer">
+                <form @submit.prevent="sendMessage()">
+                    <input
+                        type="text"
+                        v-model="myMessage"
+                        placeholder="Message"
+                        autocomplete="off"
+                    />
+                    <input
+                        type="submit"
+                        :value="isSending ? 'Sending…' : 'Send'"
+                        :disabled="!canSendMessage || isSending"
+                    />
+                </form>
+            </footer>
+        </div>
+
+        <aside
+            v-if="isPrivateGroupChat"
+            id="thread-members-panel"
+            class="thread-members-panel"
+            :class="{ 'thread-members-panel--open': isMembersPanelOpen }"
+            aria-label="Members panel"
+        >
+            <div class="thread-members-panel-header">
+                <h2 class="thread-members-panel-title">Members</h2>
+                <button type="button" class="thread-members-panel-close" @click="closeMembersPanel()">
+                    ✕
+                </button>
+            </div>
+            <ul class="thread-members-panel-list" role="list">
+                <li v-for="m of allMembers" :key="m.actor" class="thread-members-panel-row">
+                    <span
+                        class="thread-member-avatar"
+                        aria-hidden="true"
+                        :style="{ '--member-hue': m.hue }"
+                    >
+                        {{ m.initials }}
+                    </span>
+                    <div class="thread-member-meta">
+                        <div class="thread-member-name" :title="m.actor">
+                            <member-handle :actor="m.actor" :fallback="m.label" />
+                        </div>
+                    </div>
+                </li>
+            </ul>
+        </aside>
     </div>
-    <footer v-if="$graffitiSession.value" class="messages-thread-composer">
-        <form @submit.prevent="sendMessage()">
-            <input
-                type="text"
-                v-model="myMessage"
-                placeholder="Message"
-                autocomplete="off"
-            />
-            <input
-                type="submit"
-                :value="isSending ? 'Sending…' : 'Send'"
-                :disabled="!canSendMessage || isSending"
-            />
-        </form>
-    </footer>
 </section>

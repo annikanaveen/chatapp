@@ -1,4 +1,268 @@
-<section class="placeholder-view">
-    <h1>{{ title }}</h1>
-    <p>{{ description }}</p>
+<section class="attendance-view">
+    <header class="links-header">
+        <div class="links-title-stack">
+            <h1 class="links-title">Attendance</h1>
+            <p class="links-subtitle">
+                Submit an excuse for a tardy or absence. New submissions are <strong>Pending</strong> until a coach reviews them.
+            </p>
+            <label class="attendance-filter-label attendance-filter-label--under-subtitle">
+                <span class="attendance-filter-label-text">Show</span>
+                <select class="attendance-filter-select" v-model="selectedStatusFilter" :disabled="!$graffitiSession.value">
+                    <option value="pending">Pending</option>
+                    <option value="excused">Excused</option>
+                    <option value="unexcused">Unexcused</option>
+                </select>
+            </label>
+        </div>
+        <div class="attendance-header-actions">
+            <button
+                type="button"
+                class="links-add-section-btn"
+                @click="openSubmitExcuseModal()"
+                :disabled="!$graffitiSession.value"
+            >
+                + Submit excuse
+            </button>
+        </div>
+    </header>
+
+    <p v-if="!$graffitiSession.value" class="links-login-banner">
+        <button type="button" @click="$graffiti.login()">Log in</button>
+        to submit an attendance excuse and track its approval status.
+    </p>
+
+    <template v-else>
+        <p v-if="isLoading" class="links-loading"><em>Loading excuses…</em></p>
+
+        <div v-else class="attendance-sections">
+            <section v-if="selectedStatusFilter === 'pending'" class="attendance-section">
+                <header class="attendance-section-header">
+                    <h2 class="attendance-section-title">Pending</h2>
+                    <span class="attendance-section-count">{{ pendingExcuses.length }}</span>
+                </header>
+                <p v-if="pendingExcuses.length === 0" class="attendance-empty">No pending excuses.</p>
+                <ul v-else class="attendance-list" role="list">
+                    <li v-for="excuse in pendingExcuses" :key="excuse.url" class="attendance-card" role="listitem">
+                        <div class="attendance-card-top">
+                            <div class="attendance-card-title-block">
+                                <p class="attendance-card-title">{{ excuse.value.title }}</p>
+                                <p class="attendance-card-meta">
+                                    <span class="attendance-pill attendance-pill--pending">Pending</span>
+                                    <span class="attendance-meta-dot">·</span>
+                                    <span>For {{ formatExcuseForDate(excuse.value.date) }}</span>
+                                    <span class="attendance-meta-dot">·</span>
+                                    <span class="attendance-type">{{ excuse.value.kind }}</span>
+                                    <span class="attendance-meta-dot">·</span>
+                                    <span>Submitted {{ formatSubmittedDate(excuse.value.published) }}</span>
+                                </p>
+                            </div>
+                            <div class="attendance-card-actions">
+                                <button
+                                    type="button"
+                                    class="attendance-card-action-btn"
+                                    :disabled="isSubmitting || deletingId === excuse.value.id"
+                                    @click="openEditExcuseModal(excuse)"
+                                >
+                                    Edit
+                                </button>
+                                <button
+                                    type="button"
+                                    class="delete-action-btn attendance-card-delete-btn"
+                                    :disabled="isSubmitting || deletingId === excuse.value.id"
+                                    @click="confirmDeleteExcuse(excuse)"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                        <p v-if="excuse.value.details" class="attendance-card-details">{{ excuse.value.details }}</p>
+                        <p v-else class="attendance-card-details attendance-card-details--empty">No details provided.</p>
+                    </li>
+                </ul>
+            </section>
+
+            <section v-else-if="selectedStatusFilter === 'excused'" class="attendance-section">
+                <header class="attendance-section-header">
+                    <h2 class="attendance-section-title">Excused</h2>
+                    <span class="attendance-section-count">{{ excusedExcuses.length }}</span>
+                </header>
+                <p v-if="excusedExcuses.length === 0" class="attendance-empty">No excused items yet.</p>
+                <ul v-else class="attendance-list" role="list">
+                    <li v-for="excuse in excusedExcuses" :key="excuse.url" class="attendance-card" role="listitem">
+                        <div class="attendance-card-top">
+                            <div class="attendance-card-title-block">
+                                <p class="attendance-card-title">{{ excuse.value.title }}</p>
+                                <p class="attendance-card-meta">
+                                    <span class="attendance-pill attendance-pill--excused">Excused</span>
+                                    <span class="attendance-meta-dot">·</span>
+                                    <span>For {{ formatExcuseForDate(excuse.value.date) }}</span>
+                                    <span class="attendance-meta-dot">·</span>
+                                    <span class="attendance-type">{{ excuse.value.kind }}</span>
+                                    <span class="attendance-meta-dot">·</span>
+                                    <span>Submitted {{ formatSubmittedDate(excuse.value.published) }}</span>
+                                </p>
+                            </div>
+                            <div class="attendance-card-actions">
+                                <button
+                                    type="button"
+                                    class="attendance-card-action-btn"
+                                    :disabled="isSubmitting || deletingId === excuse.value.id"
+                                    @click="openEditExcuseModal(excuse)"
+                                >
+                                    Edit
+                                </button>
+                                <button
+                                    type="button"
+                                    class="delete-action-btn attendance-card-delete-btn"
+                                    :disabled="isSubmitting || deletingId === excuse.value.id"
+                                    @click="confirmDeleteExcuse(excuse)"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                        <p v-if="excuse.value.details" class="attendance-card-details">{{ excuse.value.details }}</p>
+                        <p v-else class="attendance-card-details attendance-card-details--empty">No details provided.</p>
+                    </li>
+                </ul>
+            </section>
+
+            <section v-else class="attendance-section">
+                <header class="attendance-section-header">
+                    <h2 class="attendance-section-title">Unexcused</h2>
+                    <span class="attendance-section-count">{{ unexcusedExcuses.length }}</span>
+                </header>
+                <p v-if="unexcusedExcuses.length === 0" class="attendance-empty">No unexcused items.</p>
+                <ul v-else class="attendance-list" role="list">
+                    <li v-for="excuse in unexcusedExcuses" :key="excuse.url" class="attendance-card" role="listitem">
+                        <div class="attendance-card-top">
+                            <div class="attendance-card-title-block">
+                                <p class="attendance-card-title">{{ excuse.value.title }}</p>
+                                <p class="attendance-card-meta">
+                                    <span class="attendance-pill attendance-pill--unexcused">Unexcused</span>
+                                    <span class="attendance-meta-dot">·</span>
+                                    <span>For {{ formatExcuseForDate(excuse.value.date) }}</span>
+                                    <span class="attendance-meta-dot">·</span>
+                                    <span class="attendance-type">{{ excuse.value.kind }}</span>
+                                    <span class="attendance-meta-dot">·</span>
+                                    <span>Submitted {{ formatSubmittedDate(excuse.value.published) }}</span>
+                                </p>
+                            </div>
+                            <div class="attendance-card-actions">
+                                <button
+                                    type="button"
+                                    class="attendance-card-action-btn"
+                                    :disabled="isSubmitting || deletingId === excuse.value.id"
+                                    @click="openEditExcuseModal(excuse)"
+                                >
+                                    Edit
+                                </button>
+                                <button
+                                    type="button"
+                                    class="delete-action-btn attendance-card-delete-btn"
+                                    :disabled="isSubmitting || deletingId === excuse.value.id"
+                                    @click="confirmDeleteExcuse(excuse)"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                        <p v-if="excuse.value.details" class="attendance-card-details">{{ excuse.value.details }}</p>
+                        <p v-else class="attendance-card-details attendance-card-details--empty">No details provided.</p>
+                    </li>
+                </ul>
+            </section>
+        </div>
+    </template>
+
+    <!-- Submit excuse -->
+    <div
+        v-if="isSubmitExcuseOpen && $graffitiSession.value"
+        class="create-chat-modal-overlay"
+        role="presentation"
+    >
+        <div class="create-chat-modal-backdrop" @click="closeSubmitExcuseModal()"></div>
+        <div
+            class="create-chat-modal attendance-excuse-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="attendance-excuse-modal-title"
+            @click.stop
+        >
+            <div class="create-chat-modal-header">
+                <h2 id="attendance-excuse-modal-title">{{ editingId ? "Edit attendance excuse" : "New attendance excuse" }}</h2>
+                <button
+                    type="button"
+                    class="create-chat-modal-close"
+                    :disabled="isSubmitting"
+                    @click="closeSubmitExcuseModal()"
+                    aria-label="Close"
+                >
+                    ×
+                </button>
+            </div>
+
+            <p class="create-chat-invite-hint">
+                Your excuse will be submitted to coaches for approval. Until reviewed, it will remain <strong>Pending</strong>.
+            </p>
+
+            <form class="calendar-event-form" @submit.prevent="submitExcuse()">
+                <label class="calendar-field">
+                    <span>Date</span>
+                    <input type="date" v-model="draftDate" required />
+                </label>
+
+                <fieldset class="attendance-kind-fieldset">
+                    <legend class="attendance-kind-legend">Type</legend>
+                    <label class="attendance-kind-option">
+                        <input type="radio" name="attendance-kind" value="absence" v-model="draftKind" :disabled="isSubmitting" />
+                        <span>Absence</span>
+                    </label>
+                    <label class="attendance-kind-option">
+                        <input type="radio" name="attendance-kind" value="tardy" v-model="draftKind" :disabled="isSubmitting" />
+                        <span>Tardy</span>
+                    </label>
+                </fieldset>
+
+                <label class="calendar-field">
+                    <span>Title / reason</span>
+                    <input
+                        type="text"
+                        v-model="draftTitle"
+                        placeholder="E.g., Doctor appointment"
+                        autocomplete="off"
+                        required
+                        :disabled="isSubmitting"
+                    />
+                </label>
+
+                <label class="calendar-field">
+                    <span>Details <span class="calendar-optional">(optional)</span></span>
+                    <textarea
+                        v-model="draftDetails"
+                        class="calendar-textarea"
+                        rows="5"
+                        placeholder="Add any extra context for coaches…"
+                        :disabled="isSubmitting"
+                    ></textarea>
+                </label>
+
+                <p v-if="submitError" class="create-chat-error">{{ submitError }}</p>
+
+                <div class="create-chat-modal-actions">
+                    <button
+                        type="button"
+                        class="create-chat-cancel-btn"
+                        :disabled="isSubmitting"
+                        @click="closeSubmitExcuseModal()"
+                    >
+                        Cancel
+                    </button>
+                    <button type="submit" class="calendar-submit-btn" :disabled="isSubmitting">
+                        {{ isSubmitting ? "Saving…" : editingId ? "Save changes" : "Submit" }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </section>

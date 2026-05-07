@@ -61,18 +61,44 @@
   margin-top: 0.4rem;
 }
 
-.bubble-actions button {
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 0.28rem 0.5rem;
-  border-radius: 0.4rem;
-  border: 1px solid rgba(251, 113, 133, 0.45);
-  background: rgba(251, 113, 133, 0.12);
-  color: #be123c;
-  cursor: pointer;
-  transition: background 0.15s ease;
+.thread-leave-notice {
+  margin: 0.5rem auto;
+  padding: 0.35rem 0.75rem;
+  max-width: min(100%, 36rem);
 }
 
-.bubble-actions button:hover:not(:disabled) {
-  background: rgba(251, 113, 133, 0.22);
+.thread-leave-notice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.thread-leave-notice-main {
+  white-space: nowrap;
+}
+
+.thread-leave-notice-name {
+  font-weight: 700;
+  color: #475569;
+}
+
+.thread-leave-notice-action {
+  font-weight: 500;
+}
+
+.thread-leave-notice-dot {
+  color: #94a3b8;
+  font-weight: 500;
+  user-select: none;
+}
+
+.thread-leave-notice-time {
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  color: #94a3b8;
 }

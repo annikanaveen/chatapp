@@ -1,4 +1,323 @@
-<section class="placeholder-view">
-    <h1>{{ title }}</h1>
-    <p>{{ description }}</p>
+<section class="forms-view attendance-view">
+    <header class="links-header">
+        <div class="links-title-stack">
+            <h1 class="links-title">Forms</h1>
+            <p class="links-subtitle">
+                Forms for you or the whole team—like chats, you can limit who sees one by username. Switch between
+                <strong>Active</strong> and <strong>History</strong>, then track what you’ve finished.
+            </p>
+            <label class="attendance-filter-label attendance-filter-label--under-subtitle">
+                <span class="attendance-filter-label-text">Show</span>
+                <select class="attendance-filter-select" v-model="scopeFilter" :disabled="!$graffitiSession.value">
+                    <option value="active">Active</option>
+                    <option value="history">History</option>
+                </select>
+            </label>
+        </div>
+        <div class="attendance-header-actions">
+            <button
+                type="button"
+                class="links-add-section-btn"
+                @click="openNewFormModal()"
+                :disabled="!$graffitiSession.value"
+            >
+                + New form
+            </button>
+        </div>
+    </header>
+
+    <p v-if="!$graffitiSession.value" class="links-login-banner">
+        <button type="button" @click="$graffiti.login()">Log in</button>
+        to see forms, submit responses, and create new forms for everyone.
+    </p>
+
+    <template v-else>
+        <p v-if="isLoading" class="links-loading"><em>Loading forms…</em></p>
+
+        <div v-else class="attendance-sections">
+            <section class="attendance-section">
+                <header class="attendance-section-header">
+                    <h2 class="attendance-section-title">Completed</h2>
+                    <span class="attendance-section-count">{{ completedForms.length }}</span>
+                </header>
+                <p v-if="completedForms.length === 0" class="attendance-empty">No completed forms in this view.</p>
+                <ul v-else class="attendance-list" role="list">
+                    <li
+                        v-for="form in completedForms"
+                        :key="form.url || form.value.id"
+                        class="attendance-card form-card"
+                        role="listitem"
+                    >
+                        <button
+                            type="button"
+                            class="form-card-summary"
+                            @click="openFormDetail(form)"
+                            aria-haspopup="dialog"
+                        >
+                            <span class="form-status-indicator form-status-indicator--done" title="Submitted">
+                                <span class="form-status-check" aria-hidden="true">✓</span>
+                            </span>
+                            <div class="attendance-card-title-block">
+                                <p class="attendance-card-title">{{ form.value.title }}</p>
+                                <p class="attendance-card-meta">
+                                    <span>Due {{ formatDueDateTime(form.value.dueAt) }}</span>
+                                    <template v-if="formatAssignmentSummary(form) !== 'Everyone'">
+                                        <span class="attendance-meta-dot">·</span>
+                                        <span>{{ formatAssignmentSummary(form) }}</span>
+                                    </template>
+                                </p>
+                            </div>
+                            <span class="form-card-chevron" aria-hidden="true">▶</span>
+                        </button>
+                    </li>
+                </ul>
+            </section>
+
+            <section class="attendance-section">
+                <header class="attendance-section-header">
+                    <h2 class="attendance-section-title">Incomplete</h2>
+                    <span class="attendance-section-count">{{ incompleteForms.length }}</span>
+                </header>
+                <p v-if="incompleteForms.length === 0" class="attendance-empty">You’re all caught up in this view.</p>
+                <ul v-else class="attendance-list" role="list">
+                    <li
+                        v-for="form in incompleteForms"
+                        :key="form.url || form.value.id"
+                        class="attendance-card form-card"
+                        role="listitem"
+                    >
+                        <button
+                            type="button"
+                            class="form-card-summary"
+                            @click="openFormDetail(form)"
+                            aria-haspopup="dialog"
+                        >
+                            <span class="form-status-indicator form-status-indicator--open" title="Not submitted"></span>
+                            <div class="attendance-card-title-block">
+                                <p class="attendance-card-title">{{ form.value.title }}</p>
+                                <p class="attendance-card-meta">
+                                    <span>Due {{ formatDueDateTime(form.value.dueAt) }}</span>
+                                    <template v-if="formatAssignmentSummary(form) !== 'Everyone'">
+                                        <span class="attendance-meta-dot">·</span>
+                                        <span>{{ formatAssignmentSummary(form) }}</span>
+                                    </template>
+                                </p>
+                            </div>
+                            <span class="form-card-chevron" aria-hidden="true">▶</span>
+                        </button>
+                    </li>
+                </ul>
+            </section>
+        </div>
+    </template>
+
+    <!-- Form detail (centered) -->
+    <div
+        v-if="detailForm && $graffitiSession.value"
+        class="create-chat-modal-overlay forms-detail-overlay"
+        role="presentation"
+    >
+        <div class="create-chat-modal-backdrop" @click="closeFormDetail()"></div>
+        <div
+            class="create-chat-modal forms-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="forms-detail-modal-title"
+            @click.stop
+        >
+            <div class="create-chat-modal-header">
+                <h2 id="forms-detail-modal-title">{{ detailForm.value.title }}</h2>
+                <button type="button" class="create-chat-modal-close" @click="closeFormDetail()" aria-label="Close">
+                    ×
+                </button>
+            </div>
+
+            <p class="form-detail-due">
+                <strong>Due</strong> {{ formatDueDateTime(detailForm.value.dueAt) }}
+            </p>
+            <p class="form-detail-assign">
+                <strong>Visible to</strong> {{ formatAssignmentSummary(detailForm) }}
+            </p>
+
+            <div class="form-detail-scroll">
+                <p v-if="detailForm.value.description" class="form-card-description">{{ detailForm.value.description }}</p>
+                <p v-else class="attendance-card-details attendance-card-details--empty">No description.</p>
+
+                <div class="form-card-question-block">
+                    <p class="form-card-question-label">{{ detailForm.value.questionPrompt }}</p>
+
+                    <template v-if="responseFor(detailForm)">
+                        <p class="form-card-your-answer">
+                            <strong>Your response</strong>
+                            <span class="form-card-answer-text">{{ responseFor(detailForm)?.value?.answer }}</span>
+                        </p>
+                        <div v-if="isCreator(detailForm)" class="form-card-body-actions">
+                            <button type="button" class="attendance-card-action-btn" @click="openEditFormModal(detailForm)">
+                                Edit
+                            </button>
+                            <button type="button" class="attendance-card-action-btn" @click="openResponsesComingSoon()">
+                                View responses
+                            </button>
+                            <button
+                                type="button"
+                                class="delete-action-btn attendance-card-delete-btn"
+                                :disabled="deletingFormId === detailForm.value.id || isSubmittingFormDef"
+                                @click="confirmDeleteForm(detailForm)"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </template>
+
+                    <template v-else-if="isCreator(detailForm)">
+                        <p class="form-card-creator-hint">
+                            You created this form. Others will answer the question above; you can edit the form or review responses later.
+                        </p>
+                        <div class="form-card-body-actions">
+                            <button type="button" class="attendance-card-action-btn" @click="openEditFormModal(detailForm)">
+                                Edit
+                            </button>
+                            <button type="button" class="attendance-card-action-btn" @click="openResponsesComingSoon()">
+                                View responses
+                            </button>
+                            <button
+                                type="button"
+                                class="delete-action-btn attendance-card-delete-btn"
+                                :disabled="deletingFormId === detailForm.value.id || isSubmittingFormDef"
+                                @click="confirmDeleteForm(detailForm)"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </template>
+
+                    <template v-else>
+                        <template v-if="Number(detailForm.value.dueAt) > nowMs">
+                            <label class="calendar-field form-card-response-field">
+                                <span>Your answer</span>
+                                <textarea
+                                    class="calendar-textarea"
+                                    rows="4"
+                                    :value="responseDraftFor(detailForm)"
+                                    @input="setResponseDraft(detailForm, $event.target.value)"
+                                    :disabled="submittingResponseFormId === detailForm.value.id"
+                                    placeholder="Type your response…"
+                                ></textarea>
+                            </label>
+                            <p v-if="responseErrorFor(detailForm)" class="create-chat-error form-card-response-error">
+                                {{ responseErrorFor(detailForm) }}
+                            </p>
+                            <div class="form-card-body-actions">
+                                <button
+                                    type="button"
+                                    class="calendar-submit-btn"
+                                    @click="submitResponse(detailForm)"
+                                    :disabled="submittingResponseFormId === detailForm.value.id"
+                                >
+                                    {{ submittingResponseFormId === detailForm.value.id ? "Submitting…" : "Submit response" }}
+                                </button>
+                            </div>
+                        </template>
+                        <p v-else class="form-card-past-due">The due date has passed; this form is closed for new responses.</p>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div
+        v-if="isFormModalOpen && $graffitiSession.value"
+        class="create-chat-modal-overlay forms-definition-overlay"
+        role="presentation"
+    >
+        <div class="create-chat-modal-backdrop" @click="closeFormModal()"></div>
+        <div
+            class="create-chat-modal attendance-excuse-modal forms-definition-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="forms-definition-modal-title"
+            @click.stop
+        >
+            <div class="create-chat-modal-header">
+                <h2 id="forms-definition-modal-title">{{ editingFormId ? "Edit form" : "New form" }}</h2>
+                <button
+                    type="button"
+                    class="create-chat-modal-close"
+                    :disabled="isSubmittingFormDef"
+                    @click="closeFormModal()"
+                    aria-label="Close"
+                >
+                    ×
+                </button>
+            </div>
+
+            <form class="calendar-event-form forms-definition-form" @submit.prevent="submitFormDefinition()">
+                <label class="calendar-field">
+                    <span>Title</span>
+                    <input
+                        type="text"
+                        v-model="draftTitle"
+                        placeholder="E.g., Weekend availability"
+                        autocomplete="off"
+                        required
+                        :disabled="isSubmittingFormDef"
+                    />
+                </label>
+
+                <label class="calendar-field">
+                    <span>Due date</span>
+                    <input type="datetime-local" v-model="draftDueLocal" required :disabled="isSubmittingFormDef" />
+                </label>
+
+                <label class="calendar-field">
+                    <span>Assign to specific members <span class="calendar-optional">(optional)</span></span>
+                    <input
+                        type="text"
+                        v-model="draftInviteHandles"
+                        placeholder="Usernames, separated by commas"
+                        autocomplete="off"
+                        :disabled="isSubmittingFormDef"
+                    />
+                </label>
+
+                <label class="calendar-field">
+                    <span>Description <span class="calendar-optional">(optional)</span></span>
+                    <textarea
+                        v-model="draftDescription"
+                        class="calendar-textarea"
+                        rows="3"
+                        placeholder="Additional details…"
+                        :disabled="isSubmittingFormDef"
+                    ></textarea>
+                </label>
+
+                <label class="calendar-field">
+                    <span>Question (open response)</span>
+                    <textarea
+                        v-model="draftQuestion"
+                        class="calendar-textarea"
+                        rows="3"
+                        placeholder="What do you want to ask?"
+                        required
+                        :disabled="isSubmittingFormDef"
+                    ></textarea>
+                </label>
+
+                <p v-if="formDefError" class="create-chat-error">{{ formDefError }}</p>
+
+                <div class="create-chat-modal-actions">
+                    <button type="button" class="create-chat-cancel-btn" :disabled="isSubmittingFormDef" @click="closeFormModal()">
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        class="calendar-submit-btn forms-publish-submit-btn"
+                        :disabled="isSubmittingFormDef"
+                    >
+                        {{ isSubmittingFormDef ? "Saving…" : editingFormId ? "Save changes" : "Publish" }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </section>

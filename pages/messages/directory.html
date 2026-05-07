@@ -1,34 +1,126 @@
 <section class="messages-directory">
-    <h1>Chats</h1>
-    <button v-if="!$graffitiSession.value" @click="$graffiti.login()">Log In</button>
-    <template v-else>
-        <div class="directory-toolbar">
-            <button type="button" @click="$graffiti.logout($graffitiSession.value)">
-                Log Out
-            </button>
+    <header class="links-header">
+        <div class="links-title-stack">
+            <h1 class="links-title">Messages</h1>
+            <p class="links-subtitle">
+                Open a chat or start one—only people you invite can see it and its messages.
+            </p>
         </div>
-        <div class="create-chat-block">
-            <h2>Create group chat</h2>
-            <form @submit.prevent="newChat()">
-                <input type="text" v-model="newChatTitle" placeholder="Group name" />
-                <input
-                    type="submit"
-                    :value="isCreatingChat ? 'Creating...' : 'Create group'"
-                    :disabled="!canCreateChat || isCreatingChat"
-                />
-            </form>
-        </div>
-        <div class="chat-list">
-            <h2>Your chats</h2>
-            <p v-if="areChatsLoading"><em>Loading chats...</em></p>
-            <div v-else v-for="chat in availableChats" :key="chat.channel">
+        <button
+            type="button"
+            class="links-add-section-btn"
+            @click="openCreateChat()"
+            :disabled="
+                !$graffitiSession.value ||
+                areChatsLoading ||
+                arePreviewMessagesLoading ||
+                isCreatingChat
+            "
+            aria-label="Create new chat"
+        >
+            {{ isCreatingChat ? "Creating…" : "+ New chat" }}
+        </button>
+    </header>
+
+    <p v-if="!$graffitiSession.value" class="links-login-banner">
+        <button type="button" @click="$graffiti.login()">Log in</button>
+        to see your chats and send messages.
+    </p>
+
+    <template v-if="$graffitiSession.value">
+        <p v-if="areChatsLoading || arePreviewMessagesLoading" class="links-loading">
+            <em>Loading chats…</em>
+        </p>
+        <div v-else class="chat-list">
+            <!-- <h2>Your chats</h2> -->
+            <div v-for="row in directoryChatRows" :key="row.channel">
                 <router-link
-                    :to="chatRoute(chat.channel)"
+                    :to="chatRoute(row.channel)"
                     class="chat-link chat-link-row"
                 >
-                    <span class="chat-link-title">{{ chat.title }}</span>
-                    <span class="chat-link-chevron" aria-hidden="true">›</span>
+                    <span class="chat-link-text-block">
+                        <span class="chat-link-title">{{ row.title }}</span>
+                        <span
+                            v-if="row.preview"
+                            class="chat-link-preview"
+                        >{{ row.preview }}</span>
+                        <span
+                            v-else
+                            class="chat-link-preview chat-link-preview--empty"
+                        >No messages yet</span>
+                    </span>
+                    <span class="chat-link-meta">
+                        <span
+                            v-if="row.unreadCount > 0"
+                            class="chat-unread-badge"
+                            :aria-label="row.unreadCount + ' new messages'"
+                        >{{ row.unreadDisplay }}</span>
+                        <span class="chat-link-chevron" aria-hidden="true">›</span>
+                    </span>
                 </router-link>
+            </div>
+        </div>
+        <div
+            v-if="isCreateChatOpen"
+            class="create-chat-modal-overlay"
+            role="presentation"
+        >
+            <div
+                class="create-chat-modal-backdrop"
+                @click="closeCreateChat()"
+            ></div>
+            <div
+                class="create-chat-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="create-chat-modal-title"
+                @click.stop
+            >
+                <div class="create-chat-modal-header">
+                    <h2 id="create-chat-modal-title">Create chat</h2>
+                    <button
+                        type="button"
+                        class="create-chat-modal-close"
+                        :disabled="isCreatingChat"
+                        @click="closeCreateChat()"
+                        aria-label="Close"
+                    >
+                        ×
+                    </button>
+                </div>
+                <p class="create-chat-invite-hint">
+                    Only people you invite will see this chat and its messages.
+                </p>
+                <form @submit.prevent="newChat()">
+                    <input
+                        type="text"
+                        v-model="newChatTitle"
+                        placeholder="Name (required)"
+                        autocomplete="off"
+                    />
+                    <input
+                        type="text"
+                        v-model="newChatInviteHandles"
+                        placeholder="Usernames, separated by commas"
+                        autocomplete="off"
+                    />
+                    <p v-if="chatCreateError" class="create-chat-error">{{ chatCreateError }}</p>
+                    <div class="create-chat-modal-actions">
+                        <button
+                            type="button"
+                            class="create-chat-cancel-btn"
+                            :disabled="isCreatingChat"
+                            @click="closeCreateChat()"
+                        >
+                            Cancel
+                        </button>
+                        <input
+                            type="submit"
+                            :value="isCreatingChat ? 'Creating…' : 'Create'"
+                            :disabled="isCreatingChat"
+                        />
+                    </div>
+                </form>
             </div>
         </div>
     </template>

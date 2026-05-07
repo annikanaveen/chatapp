@@ -2,10 +2,20 @@
     <router-view />
 </main>
 <nav v-if="!hideBottomToolbar" class="bottom-toolbar">
-    <router-link to="/messages" class="tab-link">Messages</router-link>
-    <router-link to="/forms" class="tab-link">Forms</router-link>
-    <router-link to="/calendar" class="tab-link">Calendar</router-link>
-    <router-link to="/attendance" class="tab-link">Attendance</router-link>
-    <router-link to="/links" class="tab-link">Links</router-link>
-    <router-link to="/profile" class="tab-link">Profile</router-link>
+    <div class="bottom-toolbar-tabs" role="presentation">
+        <router-link to="/messages" class="tab-link">Messages</router-link>
+        <router-link to="/forms" class="tab-link">Forms</router-link>
+        <router-link to="/calendar" class="tab-link">Calendar</router-link>
+        <router-link to="/attendance" class="tab-link">Attendance</router-link>
+        <router-link to="/links" class="tab-link">Links</router-link>
+        <router-link to="/profile" class="tab-link">Profile</router-link>
+    </div>
+    <button
+        v-if="$graffitiSession.value"
+        type="button"
+        class="bottom-toolbar-logout"
+        @click="$graffiti.logout($graffitiSession.value)"
+    >
+        Log Out
+    </button>
 </nav>
