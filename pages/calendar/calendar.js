@@ -126,6 +126,94 @@ function eventIsRestricted(v) {
   return true;
 }
 
+function monthIndex(year, month0) {
+  return year * 12 + month0;
+}
+
+/** dir +1 = next month, -1 = previous */
+function stepViewMonth(viewYear, viewMonth, dir) {
+  if (dir > 0) {
+    if (viewMonth.value === 11) {
+      viewMonth.value = 0;
+      viewYear.value += 1;
+    } else {
+      viewMonth.value += 1;
+    }
+  } else {
+    if (viewMonth.value === 0) {
+      viewMonth.value = 11;
+      viewYear.value -= 1;
+    } else {
+      viewMonth.value -= 1;
+    }
+  }
+}
+
+/**
+ * Slides the grid horizontally, swaps month mid-transition (carousel-style),
+ * then completes the slide. dir matches step direction (+1 forward in time).
+ */
+async function slideOneMonthStep(gridEl, dir, applyMonthStep, halfMs) {
+  if (!gridEl) {
+    applyMonthStep();
+    return;
+  }
+  const pxOut = -dir * 14;
+  gridEl.style.transitionProperty = "transform";
+  gridEl.style.transitionDuration = `${halfMs}ms`;
+  gridEl.style.transitionTimingFunction = "cubic-bezier(0.25, 0.8, 0.25, 1)";
+  gridEl.style.transform = `translateX(${pxOut}px)`;
+
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = (ev) => {
+      if (ev && ev.target !== gridEl) {
+        return;
+      }
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(tid);
+      gridEl.removeEventListener("transitionend", onEnd);
+      resolve();
+    };
+    const onEnd = (ev) => finish(ev);
+    const tid = setTimeout(() => finish(), halfMs + 100);
+    gridEl.addEventListener("transitionend", onEnd);
+  });
+
+  applyMonthStep();
+
+  const pxIn = dir * 14;
+  gridEl.style.transition = "none";
+  gridEl.style.transform = `translateX(${pxIn}px)`;
+  void gridEl.offsetHeight;
+  gridEl.style.transitionProperty = "transform";
+  gridEl.style.transitionDuration = `${halfMs}ms`;
+  gridEl.style.transitionTimingFunction = "cubic-bezier(0.25, 0.8, 0.25, 1)";
+  gridEl.style.transform = "translateX(0)";
+
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = (ev) => {
+      if (ev && ev.target !== gridEl) {
+        return;
+      }
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(tid);
+      gridEl.removeEventListener("transitionend", onEnd);
+      resolve();
+    };
+    const onEnd = (ev) => finish(ev);
+    const tid = setTimeout(() => finish(), halfMs + 100);
+    gridEl.addEventListener("transitionend", onEnd);
+  });
+}
+
 function calendarSetup() {
   const graffiti = useGraffiti();
   const session = useGraffitiSession();
@@ -133,6 +221,10 @@ function calendarSetup() {
   const now = new Date();
   const viewYear = ref(now.getFullYear());
   const viewMonth = ref(now.getMonth());
+
+  const calendarGridBodyRef = ref(null);
+  const isJumpingToToday = ref(false);
+  let jumpToTodayGeneration = 0;
 
   const {
     objects: calendarEventObjectsRaw,
@@ -339,27 +431,70 @@ function calendarSetup() {
   }
 
   function prevMonth() {
-    if (viewMonth.value === 0) {
-      viewMonth.value = 11;
-      viewYear.value -= 1;
-    } else {
-      viewMonth.value -= 1;
+    if (isJumpingToToday.value) {
+      return;
     }
+    stepViewMonth(viewYear, viewMonth, -1);
   }
 
   function nextMonth() {
-    if (viewMonth.value === 11) {
-      viewMonth.value = 0;
-      viewYear.value += 1;
-    } else {
-      viewMonth.value += 1;
+    if (isJumpingToToday.value) {
+      return;
     }
+    stepViewMonth(viewYear, viewMonth, 1);
   }
 
-  function goToThisMonth() {
+  async function goToThisMonth() {
     const t = new Date();
-    viewYear.value = t.getFullYear();
-    viewMonth.value = t.getMonth();
+    const ty = t.getFullYear();
+    const tm = t.getMonth();
+    const start = monthIndex(viewYear.value, viewMonth.value);
+    const end = monthIndex(ty, tm);
+    const delta = end - start;
+    if (delta === 0 || isJumpingToToday.value) {
+      return;
+    }
+
+    const reducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (reducedMotion) {
+      viewYear.value = ty;
+      viewMonth.value = tm;
+      return;
+    }
+
+    jumpToTodayGeneration += 1;
+    const gen = jumpToTodayGeneration;
+    isJumpingToToday.value = true;
+
+    const steps = Math.abs(delta);
+    const dir = delta > 0 ? 1 : -1;
+    const gridEl = calendarGridBodyRef.value;
+    const halfMs = Math.max(26, Math.min(48, Math.floor(700 / Math.max(steps, 1))));
+
+    try {
+      for (let i = 0; i < steps; i++) {
+        if (gen !== jumpToTodayGeneration) {
+          return;
+        }
+        await slideOneMonthStep(
+          gridEl,
+          dir,
+          () => stepViewMonth(viewYear, viewMonth, dir),
+          halfMs,
+        );
+      }
+    } finally {
+      if (gen === jumpToTodayGeneration) {
+        isJumpingToToday.value = false;
+        if (gridEl) {
+          gridEl.style.transition = "";
+          gridEl.style.transform = "";
+        }
+      }
+    }
   }
 
   const isAddEventOpen = ref(false);
@@ -546,6 +681,13 @@ function calendarSetup() {
   });
 
   onUnmounted(() => {
+    jumpToTodayGeneration += 1;
+    isJumpingToToday.value = false;
+    const gridEl = calendarGridBodyRef.value;
+    if (gridEl) {
+      gridEl.style.transition = "";
+      gridEl.style.transform = "";
+    }
     window.removeEventListener("keydown", onCalendarKeydown);
   });
 
@@ -628,6 +770,8 @@ function calendarSetup() {
     saveDetailEdit,
     confirmDeleteDetail,
     deletingUrl,
+    calendarGridBodyRef,
+    isJumpingToToday,
     prevMonth,
     nextMonth,
     goToThisMonth,

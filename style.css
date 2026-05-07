@@ -380,6 +380,26 @@ input[type="submit"]:active {
   overscroll-behavior: contain;
 }
 
+@keyframes modal-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .create-chat-modal-overlay {
   position: fixed;
   inset: 0;
@@ -397,6 +417,7 @@ input[type="submit"]:active {
   background: rgba(15, 23, 42, 0.48);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  animation: modal-backdrop-enter 0.26s ease-out both;
 }
 
 .create-chat-modal {
@@ -413,6 +434,14 @@ input[type="submit"]:active {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
   -webkit-overflow-scrolling: touch;
+  animation: modal-panel-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .create-chat-modal-backdrop,
+  .create-chat-modal {
+    animation: none;
+  }
 }
 
 .create-chat-modal-header {
@@ -1722,6 +1751,11 @@ input[type="submit"]:active {
   padding: 0.55rem 0.5rem 0.6rem;
 }
 
+.calendar-panel--jumping .calendar-grid-body {
+  overflow-x: hidden;
+  will-change: transform;
+}
+
 .calendar-nav {
   flex-shrink: 0;
   display: grid;
@@ -1780,6 +1814,12 @@ input[type="submit"]:active {
   border-color: var(--primary);
   background: var(--primary-softer);
   color: var(--primary-dark);
+}
+
+.calendar-nav-btn:disabled,
+.calendar-today-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .calendar-today-btn {

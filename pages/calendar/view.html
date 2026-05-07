@@ -24,14 +24,30 @@
     <template v-else>
         <p v-if="areCalendarEventsLoading" class="links-loading"><em>Loading events…</em></p>
 
-        <div v-else class="calendar-panel">
+        <div
+            v-else
+            class="calendar-panel"
+            :class="{ 'calendar-panel--jumping': isJumpingToToday }"
+        >
             <div class="calendar-nav">
-                <button type="button" class="calendar-nav-btn calendar-nav-prev" @click="prevMonth()" aria-label="Previous month">
+                <button
+                    type="button"
+                    class="calendar-nav-btn calendar-nav-prev"
+                    @click="prevMonth()"
+                    :disabled="isJumpingToToday"
+                    aria-label="Previous month"
+                >
                     ‹
                 </button>
                 <h2 class="calendar-month-label">{{ monthLabel }}</h2>
                 <div class="calendar-nav-end">
-                    <button type="button" class="calendar-nav-btn" @click="nextMonth()" aria-label="Next month">
+                    <button
+                        type="button"
+                        class="calendar-nav-btn"
+                        @click="nextMonth()"
+                        :disabled="isJumpingToToday"
+                        aria-label="Next month"
+                    >
                         ›
                     </button>
                 </div>
@@ -41,7 +57,7 @@
                 <span v-for="w in weekdayLabels" :key="w" class="calendar-weekday">{{ w }}</span>
             </div>
 
-            <div class="calendar-grid-body">
+            <div ref="calendarGridBodyRef" class="calendar-grid-body">
             <div class="calendar-grid" role="grid" :aria-label="monthLabel">
                 <div
                     v-for="cell in calendarCells"
@@ -84,7 +100,14 @@
             </div>
 
             <div class="calendar-panel-footer">
-                <button type="button" class="calendar-today-btn" @click="goToThisMonth()">Jump to current</button>
+                <button
+                    type="button"
+                    class="calendar-today-btn"
+                    :disabled="isJumpingToToday"
+                    @click="goToThisMonth()"
+                >
+                    Jump to current
+                </button>
             </div>
         </div>
     </template>
