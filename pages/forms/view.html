@@ -3,7 +3,7 @@
         <div class="links-title-stack">
             <h1 class="links-title">Forms</h1>
             <p class="links-subtitle">
-                Forms for you or the whole team—like chats, you can limit who sees one by username. Switch between
+                Forms for you or the whole team—limit visibility with squad groups and roster members. Switch between
                 <strong>Active</strong> and <strong>History</strong>, then track what you’ve finished.
             </p>
             <label class="attendance-filter-label attendance-filter-label--under-subtitle">
@@ -16,6 +16,7 @@
         </div>
         <div class="attendance-header-actions">
             <button
+                v-if="isCoach"
                 type="button"
                 class="links-add-section-btn"
                 @click="openNewFormModal()"
@@ -232,7 +233,7 @@
     >
         <div class="create-chat-modal-backdrop" @click="closeFormModal()"></div>
         <div
-            class="create-chat-modal attendance-excuse-modal forms-definition-modal"
+            class="create-chat-modal attendance-excuse-modal forms-definition-modal create-chat-modal--team-roster"
             role="dialog"
             aria-modal="true"
             aria-labelledby="forms-definition-modal-title"
@@ -269,16 +270,15 @@
                     <input type="datetime-local" v-model="draftDueLocal" required :disabled="isSubmittingFormDef" />
                 </label>
 
-                <label class="calendar-field">
-                    <span>Assign to specific members <span class="calendar-optional">(optional)</span></span>
-                    <input
-                        type="text"
-                        v-model="draftInviteHandles"
-                        placeholder="Usernames, separated by commas"
-                        autocomplete="off"
-                        :disabled="isSubmittingFormDef"
-                    />
-                </label>
+                <team-audience-form-field
+                    v-model="draftAudienceKeys"
+                    :members="rosterMembers"
+                    :loading="rosterDiscoverLoading"
+                    :disabled="isSubmittingFormDef"
+                    id-prefix="form-def"
+                >
+                    Visible to <span class="calendar-optional">(optional)</span>
+                </team-audience-form-field>
 
                 <label class="calendar-field">
                     <span>Description <span class="calendar-optional">(optional)</span></span>

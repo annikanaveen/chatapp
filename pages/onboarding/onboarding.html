@@ -1,0 +1,268 @@
+<section class="onboarding-view">
+    <p v-if="$graffitiSession.value === undefined" class="onboarding-loading">
+        <em>Loading…</em>
+    </p>
+
+    <div v-else-if="$graffitiSession.value === null" class="onboarding-guest">
+        <h1 class="onboarding-title">Welcome</h1>
+        <p>Log in to set up your profile and join your team.</p>
+        <button type="button" class="onboarding-primary-btn" @click="$graffiti.login()">
+            Log in
+        </button>
+    </div>
+
+    <template v-else>
+        <header class="onboarding-header">
+            <h1 class="onboarding-title">Welcome</h1>
+            <p class="onboarding-subtitle">
+                <template v-if="draft.role === 'athlete'"
+                    >Step {{ step + 1 }} of 4 — one-time setup for your team space.</template
+                >
+                <template v-else-if="draft.role === 'coach'"
+                    >Step {{ step + 1 }} of 3 — one-time setup for your team space.</template
+                >
+                <template v-else>Step {{ step + 1 }} — one-time setup for your team space.</template>
+            </p>
+        </header>
+
+        <p v-if="error" class="onboarding-error" role="alert">{{ error }}</p>
+
+        <!-- Step 0: names -->
+        <form v-if="step === 0" class="onboarding-panel" @submit.prevent="submitNames">
+            <label class="onboarding-field">
+                <span class="onboarding-label">First name</span>
+                <input
+                    type="text"
+                    v-model.trim="draft.firstName"
+                    autocomplete="given-name"
+                    required
+                />
+            </label>
+            <label class="onboarding-field">
+                <span class="onboarding-label">Last name</span>
+                <input
+                    type="text"
+                    v-model.trim="draft.lastName"
+                    autocomplete="family-name"
+                    required
+                />
+            </label>
+            <div class="onboarding-actions onboarding-actions--stack">
+                <button type="submit" class="onboarding-primary-btn">Continue</button>
+            </div>
+        </form>
+
+        <!-- Step 1: role -->
+        <div v-else-if="step === 1" class="onboarding-panel">
+            <fieldset class="onboarding-fieldset">
+                <legend class="onboarding-legend">Your role</legend>
+                <label class="onboarding-radio-label">
+                    <input type="radio" value="athlete" v-model="draft.role" />
+                    Athlete
+                </label>
+                <label class="onboarding-radio-label">
+                    <input type="radio" value="coach" v-model="draft.role" />
+                    Coach
+                </label>
+            </fieldset>
+            <div class="onboarding-actions onboarding-actions--split">
+                <button type="button" class="onboarding-secondary-btn" @click="goBack">Back</button>
+                <button type="button" class="onboarding-primary-btn" @click="submitRole">
+                    Continue
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 2: athlete sport/team OR coach create team -->
+        <div v-else-if="step === 2 && draft.role === 'athlete'" class="onboarding-panel">
+            <fieldset class="onboarding-fieldset">
+                <legend class="onboarding-legend">Sport</legend>
+                <label class="onboarding-radio-label">
+                    <input type="radio" value="swimmer" v-model="draft.sport" />
+                    Swimmer
+                </label>
+                <label class="onboarding-radio-label">
+                    <input type="radio" value="diver" v-model="draft.sport" />
+                    Diver
+                </label>
+            </fieldset>
+            <fieldset class="onboarding-fieldset">
+                <legend class="onboarding-legend">Team</legend>
+                <label class="onboarding-radio-label">
+                    <input type="radio" value="women" v-model="draft.team" />
+                    Women
+                </label>
+                <label class="onboarding-radio-label">
+                    <input type="radio" value="men" v-model="draft.team" />
+                    Men
+                </label>
+            </fieldset>
+            <div class="onboarding-actions onboarding-actions--split">
+                <button type="button" class="onboarding-secondary-btn" @click="goBack">Back</button>
+                <button type="button" class="onboarding-primary-btn" @click="submitAthleteDetails">
+                    Continue
+                </button>
+            </div>
+        </div>
+
+        <div v-else-if="step === 2 && draft.role === 'coach'" class="onboarding-panel">
+            <!-- Coach: choose create vs join -->
+            <template v-if="coachTeamPhase === 'choose'">
+                <p class="onboarding-hint">
+                    Create a brand-new team space (you’ll get a team ID to share), or join a team that already exists using its ID.
+                </p>
+                <div class="onboarding-actions onboarding-actions--stack onboarding-actions--stack-gap">
+                    <button type="button" class="onboarding-primary-btn" @click="selectCoachCreateTeam">
+                        Create new team ID
+                    </button>
+                    <button type="button" class="onboarding-secondary-btn onboarding-secondary-btn--full" @click="selectCoachJoinTeam">
+                        Join existing team
+                    </button>
+                </div>
+                <div class="onboarding-actions">
+                    <button type="button" class="onboarding-secondary-btn" @click="goBack">Back</button>
+                </div>
+            </template>
+
+            <!-- Coach: create new team → register manifest -->
+            <template v-else-if="coachTeamPhase === 'create' && !coachTeamId">
+                <label class="onboarding-field">
+                    <span class="onboarding-label">Team name</span>
+                    <input
+                        type="text"
+                        v-model.trim="draft.coachTeamName"
+                        placeholder="e.g., MIT Swim and Dive"
+                        autocomplete="off"
+                        spellcheck="false"
+                        maxlength="80"
+                        :disabled="isWorking"
+                        required
+                    />
+                </label>
+                <p class="onboarding-hint">
+                    We’ll register a new team on the network and give you a team ID to share with athletes. The team name is visible to everyone who joins.
+                </p>
+                <div class="onboarding-actions onboarding-actions--split">
+                    <button type="button" class="onboarding-secondary-btn" @click="goBack">Back</button>
+                    <button
+                        type="button"
+                        class="onboarding-primary-btn"
+                        :disabled="isWorking || !draft.coachTeamName"
+                        @click="createCoachTeam"
+                    >
+                        {{ isWorking ? "Creating…" : "Create team" }}
+                    </button>
+                </div>
+            </template>
+
+            <!-- Coach: create success -->
+            <template v-else-if="coachTeamPhase === 'create' && coachTeamId">
+                <p class="onboarding-success-lead">
+                    Your team ID (share this with athletes so they can join):
+                </p>
+                <div class="onboarding-team-id-row">
+                    <code class="onboarding-team-id" translate="no">{{ coachTeamId }}</code>
+                    <button
+                        type="button"
+                        class="links-copy-btn"
+                        :aria-label="coachTeamIdJustCopied ? 'Copied' : 'Copy team ID'"
+                        @click="copyTeamId"
+                    >
+                        {{ coachTeamIdJustCopied ? "Copied!" : "Copy Link" }}
+                    </button>
+                </div>
+                <p class="onboarding-hint">
+                    You will not be asked to set up a team again. You can copy this ID from Profile later.
+                </p>
+                <div class="onboarding-actions onboarding-actions--stack">
+                    <button
+                        type="button"
+                        class="onboarding-primary-btn"
+                        @click="finishCoachOnboarding"
+                    >
+                        Continue to app
+                    </button>
+                </div>
+            </template>
+
+            <!-- Coach: join existing team -->
+            <form v-else-if="coachTeamPhase === 'join'" @submit.prevent="submitCoachJoin">
+                <label class="onboarding-field">
+                    <span class="onboarding-label">Existing team ID</span>
+                    <input
+                        type="text"
+                        v-model.trim="draft.coachJoinTeamIdInput"
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        autocomplete="off"
+                        spellcheck="false"
+                        :disabled="isWorking"
+                    />
+                </label>
+                <p class="onboarding-hint">
+                    Paste the UUID for the team you’re joining (same check as for athletes).
+                </p>
+                <div class="onboarding-actions onboarding-actions--stack onboarding-actions--stack-gap">
+                    <button
+                        type="button"
+                        class="onboarding-secondary-btn onboarding-secondary-btn--full"
+                        :disabled="isWorking"
+                        @click="goBack"
+                    >
+                        Back
+                    </button>
+                    <button type="submit" class="onboarding-primary-btn" :disabled="isWorking">
+                        {{ isWorking ? "Checking…" : "Join team" }}
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Step 3: athlete join -->
+        <form v-else-if="step === 3" class="onboarding-panel" @submit.prevent="submitAthleteJoin">
+            <label class="onboarding-field">
+                <span class="onboarding-label">Team ID from your coach</span>
+                <input
+                    type="text"
+                    v-model.trim="draft.athleteTeamIdInput"
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    autocomplete="off"
+                    spellcheck="false"
+                    :disabled="isWorking"
+                />
+            </label>
+            <p class="onboarding-hint">
+                We check that your coach has registered this team on the network. Paste the UUID they shared.
+            </p>
+            <div class="onboarding-actions onboarding-actions--stack onboarding-actions--stack-gap">
+                <button
+                    type="button"
+                    class="onboarding-secondary-btn onboarding-secondary-btn--full"
+                    :disabled="isWorking"
+                    @click="goBack"
+                >
+                    Back
+                </button>
+                <button
+                    type="submit"
+                    class="onboarding-primary-btn"
+                    :disabled="isWorking"
+                >
+                    {{ isWorking ? "Checking…" : "Join team" }}
+                </button>
+            </div>
+        </form>
+
+        <p
+            v-if="$graffitiSession.value && !(step === 2 && draft.role === 'coach' && coachTeamPhase === 'create' && coachTeamId)"
+            class="onboarding-footer-logout"
+        >
+            <button
+                type="button"
+                class="onboarding-logout-btn"
+                @click="$graffiti.logout($graffitiSession.value)"
+            >
+                Log out
+            </button>
+        </p>
+    </template>
+</section>

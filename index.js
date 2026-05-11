@@ -13,6 +13,9 @@ import { createCalendarView } from "./pages/calendar/calendar.js";
 import { createAttendanceView } from "./pages/attendance/attendance.js";
 import { createLinksView } from "./pages/links/links.js";
 import { createProfileView } from "./pages/profile/profile.js";
+import { createOnboardingView } from "./pages/onboarding/onboarding.js";
+import { createWaitingApprovalView } from "./pages/waiting-approval/waiting-approval.js";
+import { createMemberRequestsPageView } from "./pages/profile/member-requests-page.js";
 
 const AppRoot = { template: "<router-view />" };
 
@@ -26,6 +29,9 @@ async function bootstrap() {
     AttendanceView,
     LinksView,
     ProfileView,
+    OnboardingView,
+    WaitingApprovalView,
+    MemberRequestsPageView,
   ] = await Promise.all([
     createRootShell(),
     createMessagesDirectoryView(),
@@ -35,6 +41,9 @@ async function bootstrap() {
     createAttendanceView(),
     createLinksView(),
     createProfileView(),
+    createOnboardingView(),
+    createWaitingApprovalView(),
+    createMemberRequestsPageView(),
   ]);
 
   const router = createRouter({
@@ -45,6 +54,18 @@ async function bootstrap() {
         component: RootShell,
         children: [
           { path: "", redirect: { name: "messages-directory" } },
+          {
+            path: "onboarding",
+            name: "onboarding",
+            component: OnboardingView,
+            meta: { hideTabBar: true },
+          },
+          {
+            path: "waiting-approval",
+            name: "waiting-approval",
+            component: WaitingApprovalView,
+            meta: { hideTabBar: true },
+          },
           {
             path: "messages",
             name: "messages-directory",
@@ -64,6 +85,20 @@ async function bootstrap() {
             path: "profile",
             name: "profile",
             component: ProfileView,
+          },
+          {
+            path: "profile/team",
+            name: "profile-team",
+            component: MemberRequestsPageView,
+            meta: { hideTabBar: true },
+          },
+          {
+            path: "profile/member-requests",
+            redirect: { name: "profile-team" },
+          },
+          {
+            path: "profile/members",
+            redirect: { name: "profile-team" },
           },
           {
             path: "settings",

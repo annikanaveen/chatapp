@@ -1,21 +1,42 @@
-<main class="tab-content" :class="{ 'tab-content--thread': hideBottomToolbar }">
-    <router-view />
-</main>
-<nav v-if="!hideBottomToolbar" class="bottom-toolbar">
-    <div class="bottom-toolbar-tabs" role="presentation">
-        <router-link to="/messages" class="tab-link">Messages</router-link>
-        <router-link to="/forms" class="tab-link">Forms</router-link>
-        <router-link to="/calendar" class="tab-link">Calendar</router-link>
-        <router-link to="/attendance" class="tab-link">Attendance</router-link>
-        <router-link to="/links" class="tab-link">Links</router-link>
-        <router-link to="/profile" class="tab-link">Profile</router-link>
-    </div>
-    <button
-        v-if="$graffitiSession.value"
-        type="button"
-        class="bottom-toolbar-logout"
-        @click="$graffiti.logout($graffitiSession.value)"
-    >
-        Log Out
-    </button>
-</nav>
+<template v-if="$graffitiSession.value === undefined">
+    <main class="app-shell-loading">
+        <p><em>Loading…</em></p>
+    </main>
+</template>
+<template v-else-if="$graffitiSession.value === null">
+    <main class="app-login-shell">
+        <section class="app-login-card">
+            <h1 class="app-login-title">TeamConnect</h1>
+            <p class="app-login-subtitle">Log in to access your team space.</p>
+            <button
+                type="button"
+                class="app-login-btn"
+                @click="$graffiti.login()"
+            >
+                Log in
+            </button>
+        </section>
+    </main>
+</template>
+<template v-else>
+    <main class="tab-content" :class="{ 'tab-content--thread': hideBottomToolbar }">
+        <router-view />
+    </main>
+    <nav v-if="!hideBottomToolbar" class="bottom-toolbar">
+        <div class="bottom-toolbar-tabs" role="presentation">
+            <router-link to="/messages" class="tab-link">Messages</router-link>
+            <router-link to="/forms" class="tab-link">Forms</router-link>
+            <router-link to="/calendar" class="tab-link">Calendar</router-link>
+            <router-link to="/attendance" class="tab-link">Attendance</router-link>
+            <router-link to="/links" class="tab-link">Links</router-link>
+            <router-link to="/profile" class="tab-link">Profile</router-link>
+        </div>
+        <button
+            type="button"
+            class="bottom-toolbar-logout"
+            @click="$graffiti.logout($graffitiSession.value)"
+        >
+            Log Out
+        </button>
+    </nav>
+</template>

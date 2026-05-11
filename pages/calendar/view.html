@@ -3,7 +3,8 @@
         <div class="links-title-stack">
             <h1 class="links-title">Calendar</h1>
             <p class="links-subtitle">
-                Click an event for details. With no invitees, only you can see the event; add names to share it with those people.
+                Click an event for details. With no one selected, only you can see the event; pick squad groups and/or
+                members to share it with them.
             </p>
         </div>
         <button
@@ -120,7 +121,7 @@
     >
         <div class="create-chat-modal-backdrop" @click="closeAddEventModal()"></div>
         <div
-            class="create-chat-modal calendar-event-modal"
+            class="create-chat-modal calendar-event-modal create-chat-modal--team-roster"
             role="dialog"
             aria-modal="true"
             aria-labelledby="calendar-event-modal-title"
@@ -139,7 +140,8 @@
                 </button>
             </div>
             <p class="create-chat-invite-hint">
-                Leave invite blank to keep the event private to you. Add Graffiti usernames (comma-separated) to invite others.
+                Leave the audience empty to keep the event private to you. Otherwise choose groups and/or members from
+                your team roster (you are always included).
             </p>
             <form class="calendar-event-form" @submit.prevent="submitNewEvent()">
                 <label class="calendar-field">
@@ -169,15 +171,15 @@
                     <span>Time <span class="calendar-optional">(optional)</span></span>
                     <input type="time" v-model="newEventTime" />
                 </label>
-                <label class="calendar-field">
-                    <span>Invite <span class="calendar-optional">(optional)</span></span>
-                    <input
-                        type="text"
-                        v-model="newEventInviteHandles"
-                        placeholder="Usernames, separated by commas"
-                        autocomplete="off"
-                    />
-                </label>
+                <team-audience-form-field
+                    v-model="newEventAudienceKeys"
+                    :members="rosterMembers"
+                    :loading="rosterDiscoverLoading"
+                    :disabled="isPostingEvent"
+                    id-prefix="cal-new"
+                >
+                    Who can see this <span class="calendar-optional">(optional)</span>
+                </team-audience-form-field>
                 <p v-if="eventCreateError" class="create-chat-error">{{ eventCreateError }}</p>
                 <div class="create-chat-modal-actions">
                     <button
@@ -208,7 +210,7 @@
     >
         <div class="create-chat-modal-backdrop" @click="closeEventDetail()"></div>
         <div
-            class="create-chat-modal calendar-event-detail-modal"
+            class="create-chat-modal calendar-event-detail-modal create-chat-modal--team-roster"
             role="dialog"
             aria-modal="true"
             aria-labelledby="calendar-detail-title"
@@ -305,15 +307,15 @@
                     <span>Time <span class="calendar-optional">(optional)</span></span>
                     <input type="time" v-model="editTime" />
                 </label>
-                <label class="calendar-field">
-                    <span>Invite <span class="calendar-optional">(optional)</span></span>
-                    <input
-                        type="text"
-                        v-model="editInviteHandles"
-                        placeholder="Usernames, separated by commas"
-                        autocomplete="off"
-                    />
-                </label>
+                <team-audience-form-field
+                    v-model="editEventAudienceKeys"
+                    :members="rosterMembers"
+                    :loading="rosterDiscoverLoading"
+                    :disabled="isSavingDetail"
+                    id-prefix="cal-edit"
+                >
+                    Who can see this <span class="calendar-optional">(optional)</span>
+                </team-audience-form-field>
                 <p v-if="detailError" class="create-chat-error">{{ detailError }}</p>
                 <div class="create-chat-modal-actions">
                     <button

@@ -1,7 +1,12 @@
 import { ref, computed, watch } from "vue";
 import { useGraffiti, useGraffitiSession, useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
 import { loadTemplate } from "../../lib/load-template.js";
-import { DIRECTORY_CHANNEL, ATTENDANCE_EXCUSE_DISCOVER_SCHEMA } from "../messages/constants.js";
+import {
+  ATTENDANCE_EXCUSE_DISCOVER_SCHEMA,
+  ATTENDANCE_DECISION_DISCOVER_SCHEMA,
+} from "../messages/constants.js";
+import { useTeamDirectoryChannel } from "../../lib/use-team-directory-channel.js";
+import { useViewerTeamRole } from "../../lib/use-viewer-team-role.js";
 
 function randomId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -107,42 +112,109 @@ function formatExcuseForDate(isoDateStr) {
 function attendanceSetup() {
   const graffiti = useGraffiti();
   const session = useGraffitiSession();
+  const teamDirectory = useTeamDirectoryChannel();
+  const { isCoach, rosterMembers } = useViewerTeamRole();
 
   const { objects: excuseObjectsRaw, isFirstPoll } = useGraffitiDiscover(
-    [DIRECTORY_CHANNEL],
+    () => [teamDirectory.value],
     ATTENDANCE_EXCUSE_DISCOVER_SCHEMA,
     () => session.value,
   );
 
-  const isLoading = computed(() => !!isFirstPoll.value);
+  const { objects: decisionObjectsRaw, isFirstPoll: isDecisionFirstPoll } =
+    useGraffitiDiscover(
+      () => [teamDirectory.value],
+      ATTENDANCE_DECISION_DISCOVER_SCHEMA,
+      () => session.value,
+    );
 
-  // Only show excuses the current user submitted (coach approval UI can show all later).
+  const isLoading = computed(
+    () => !!isFirstPoll.value || !!isDecisionFirstPoll.value,
+  );
+
+  /** Latest coach decision per excuse id (by `published`). */
+  const latestDecisionByExcuseId = computed(() => {
+    const all = Array.isArray(decisionObjectsRaw.value) ? decisionObjectsRaw.value : [];
+    const byId = new Map();
+    for (const o of all) {
+      const v = o?.value;
+      if (!v || v.type !== "AttendanceDecision") {
+        continue;
+      }
+      const eid = String(v.excuseId || "").trim();
+      if (!eid) {
+        continue;
+      }
+      const pub = Number(v.published || 0);
+      const prev = byId.get(eid);
+      const prevPub = Number(prev?.value?.published || 0);
+      if (!prev || pub > prevPub) {
+        byId.set(eid, o);
+      }
+    }
+    return byId;
+  });
+
+  /** Effective status: latest coach decision overlays the athlete-posted status. */
+  function effectiveStatusFor(excuseObject) {
+    const id = String(excuseObject?.value?.id || "").trim();
+    const decision = id ? latestDecisionByExcuseId.value.get(id) : null;
+    const decided = normalizeStatus(decision?.value?.status);
+    if (decision && (decided === "excused" || decided === "unexcused" || decided === "pending")) {
+      return decided;
+    }
+    return normalizeStatus(excuseObject?.value?.status);
+  }
+
+  /** All AttendanceExcuse objects on this team channel (any actor). */
+  const allExcuseObjects = computed(() => {
+    const all = Array.isArray(excuseObjectsRaw.value) ? excuseObjectsRaw.value : [];
+    return all.filter((o) => o?.value?.type === "AttendanceExcuse");
+  });
+
+  /** Excuses posted by the signed-in actor. */
   const myExcuseObjects = computed(() => {
     const actor = session.value?.actor;
-    const all = Array.isArray(excuseObjectsRaw.value) ? excuseObjectsRaw.value : [];
     if (!actor) {
       return [];
     }
-    return all.filter((o) => o?.value?.type === "AttendanceExcuse" && o?.actor === actor);
+    return allExcuseObjects.value.filter((o) => o?.actor === actor);
   });
 
-  const myLatestExcuseObjects = computed(() => {
-    return pickLatestById(myExcuseObjects.value);
+  /** Excuses the viewer can act on (coach: everyone; athlete: their own). */
+  const visibleExcuseObjects = computed(() => {
+    return isCoach.value ? allExcuseObjects.value : myExcuseObjects.value;
   });
 
-  const sortedMyExcuses = computed(() => {
-    return [...myLatestExcuseObjects.value].sort(sortByDateThenPublishedDesc);
+  const sortedVisibleExcuses = computed(() => {
+    return [...pickLatestById(visibleExcuseObjects.value)].sort(
+      sortByDateThenPublishedDesc,
+    );
   });
 
   const pendingExcuses = computed(() =>
-    sortedMyExcuses.value.filter((o) => normalizeStatus(o?.value?.status) === "pending"),
+    sortedVisibleExcuses.value.filter((o) => effectiveStatusFor(o) === "pending"),
   );
   const excusedExcuses = computed(() =>
-    sortedMyExcuses.value.filter((o) => normalizeStatus(o?.value?.status) === "excused"),
+    sortedVisibleExcuses.value.filter((o) => effectiveStatusFor(o) === "excused"),
   );
   const unexcusedExcuses = computed(() =>
-    sortedMyExcuses.value.filter((o) => normalizeStatus(o?.value?.status) === "unexcused"),
+    sortedVisibleExcuses.value.filter((o) => effectiveStatusFor(o) === "unexcused"),
   );
+
+  /** Roster row for the excuse's submitter (used in coach view to show a name). */
+  function submitterDisplayNameFor(excuseObject) {
+    const actor = String(excuseObject?.actor || "").trim();
+    if (!actor) {
+      return "";
+    }
+    const row = (rosterMembers.value || []).find((r) => r.actor === actor);
+    if (row?.displayName) {
+      return row.displayName;
+    }
+    const dot = actor.indexOf(".");
+    return dot === -1 ? actor : actor.slice(0, dot) || actor;
+  }
 
   const selectedStatusFilter = ref("pending");
 
@@ -174,6 +246,10 @@ function attendanceSetup() {
       window.alert("Log in to submit an attendance excuse.");
       return;
     }
+    if (isCoach.value) {
+      window.alert("Coaches review excuses from athletes; they don't submit their own.");
+      return;
+    }
     resetDraft();
     isSubmitExcuseOpen.value = true;
   }
@@ -181,6 +257,10 @@ function attendanceSetup() {
   function openEditExcuseModal(excuseObject) {
     if (!session.value?.actor) {
       window.alert("Log in to edit an attendance excuse.");
+      return;
+    }
+    const actor = session.value.actor;
+    if (excuseObject?.actor !== actor) {
       return;
     }
     const v = excuseObject?.value;
@@ -220,7 +300,7 @@ function attendanceSetup() {
     await graffiti.post(
       {
         value,
-        channels: [DIRECTORY_CHANNEL],
+        channels: [teamDirectory.value],
       },
       session.value,
     );
@@ -253,6 +333,10 @@ function attendanceSetup() {
     if (!id) {
       return;
     }
+    const actor = session.value?.actor;
+    if (!actor || excuseObject?.actor !== actor) {
+      return;
+    }
     const ok = window.confirm("Delete this attendance excuse? This cannot be undone.");
     if (!ok) {
       return;
@@ -260,9 +344,53 @@ function attendanceSetup() {
     await deleteExcuseById(id);
   }
 
+  /** Coach action: post a decision overlay for the excuse. */
+  const decidingId = ref(null);
+  async function setDecisionStatus(excuseObject, nextStatus) {
+    if (!session.value?.actor) {
+      window.alert("Log in to update attendance.");
+      return;
+    }
+    if (!isCoach.value) {
+      return;
+    }
+    const excuseId = String(excuseObject?.value?.id || "").trim();
+    if (!excuseId) {
+      return;
+    }
+    const status = normalizeStatus(nextStatus);
+    if (status === effectiveStatusFor(excuseObject)) {
+      return;
+    }
+    decidingId.value = excuseId;
+    try {
+      await graffiti.post(
+        {
+          value: {
+            type: "AttendanceDecision",
+            excuseId,
+            status,
+            published: Date.now(),
+          },
+          channels: [teamDirectory.value],
+        },
+        session.value,
+      );
+    } catch (error) {
+      console.error(error);
+      window.alert(error?.message || "Could not update attendance. Please try again.");
+    } finally {
+      decidingId.value = null;
+    }
+  }
+
   async function submitExcuse() {
     if (!session.value?.actor) {
       submitError.value = "Log in to submit an excuse.";
+      return;
+    }
+    if (isCoach.value) {
+      submitError.value = "Coaches don't submit their own excuses.";
       return;
     }
     submitError.value = "";
@@ -310,13 +438,17 @@ function attendanceSetup() {
 
   return {
     isLoading,
+    isCoach,
     pendingExcuses,
     excusedExcuses,
     unexcusedExcuses,
     selectedStatusFilter,
     formatSubmittedDate,
     formatExcuseForDate,
+    submitterDisplayNameFor,
+    effectiveStatusFor,
     deletingId,
+    decidingId,
     editingId,
     isSubmitExcuseOpen,
     isSubmitting,
@@ -330,6 +462,7 @@ function attendanceSetup() {
     closeSubmitExcuseModal,
     confirmDeleteExcuse,
     submitExcuse,
+    setDecisionStatus,
   };
 }
 

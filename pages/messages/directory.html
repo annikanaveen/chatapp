@@ -70,7 +70,7 @@
                 @click="closeCreateChat()"
             ></div>
             <div
-                class="create-chat-modal"
+                class="create-chat-modal create-chat-modal--team-roster"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="create-chat-modal-title"
@@ -89,7 +89,8 @@
                     </button>
                 </div>
                 <p class="create-chat-invite-hint">
-                    Only people you invite will see this chat and its messages.
+                    Choose squad groups and/or members from your team roster. Only selected people will see this chat
+                    (you are always included).
                 </p>
                 <form @submit.prevent="newChat()">
                     <input
@@ -98,12 +99,15 @@
                         placeholder="Name (required)"
                         autocomplete="off"
                     />
-                    <input
-                        type="text"
-                        v-model="newChatInviteHandles"
-                        placeholder="Usernames, separated by commas"
-                        autocomplete="off"
-                    />
+                    <team-audience-form-field
+                        v-model="newChatAudienceKeys"
+                        :members="rosterMembers"
+                        :loading="rosterDiscoverLoading"
+                        :disabled="isCreatingChat"
+                        id-prefix="new-chat"
+                    >
+                        Who can access this chat
+                    </team-audience-form-field>
                     <p v-if="chatCreateError" class="create-chat-error">{{ chatCreateError }}</p>
                     <div class="create-chat-modal-actions">
                         <button

@@ -40,11 +40,20 @@
         </div>
         <div class="thread-header-actions">
             <button
+                v-if="$graffitiSession.value && canRenameSelectedChat"
+                type="button"
+                class="thread-rename-chat-btn"
+                @click="renameChat()"
+                :disabled="isRenamingChat || isDeletingChat || isLeavingChat"
+            >
+                {{ isRenamingChat ? "…" : "Edit" }}
+            </button>
+            <button
                 v-if="$graffitiSession.value && canDeleteEntireChat"
                 type="button"
                 class="thread-delete-chat-btn"
                 @click="deleteEntireChat()"
-                :disabled="isDeletingChat || isLeavingChat"
+                :disabled="isDeletingChat || isLeavingChat || isRenamingChat"
             >
                 {{ isDeletingChat ? "…" : "Delete chat" }}
             </button>
@@ -53,7 +62,7 @@
                 type="button"
                 class="thread-leave-btn"
                 @click="leaveChat()"
-                :disabled="isLeavingChat || isDeletingChat"
+                :disabled="isLeavingChat || isDeletingChat || isRenamingChat"
             >
                 {{ isLeavingChat ? "…" : "Leave" }}
             </button>
@@ -74,7 +83,7 @@
                     <em>Loading messages…</em>
                 </p>
                 <ul v-else class="messages-list thread-messages-list">
-                    <li v-for="item of threadTimeline" :key="item.kind + '-' + item.object.url">
+                    <li v-for="item of threadTimeline" :key="item.kind + '-' + item.sortKey">
                         <message-bubble
                             v-if="item.kind === 'message'"
                             :actor="item.object.actor"
@@ -99,6 +108,32 @@
                             :actor="item.object.actor"
                             :published="item.object.value.published"
                         />
+                        <system-notice
+                            v-else-if="item.kind === 'rename'"
+                            :published="item.published"
+                        >
+                            <span class="thread-leave-notice-name">
+                                <member-handle :actor="item.actor" />
+                            </span>
+                            <span class="thread-leave-notice-action">
+                                renamed the chat to “<strong>{{ item.newTitle }}</strong>”
+                            </span>
+                        </system-notice>
+                        <system-notice
+                            v-else-if="item.kind === 'add'"
+                            :published="item.published"
+                        >
+                            <span class="thread-leave-notice-name">
+                                <member-handle :actor="item.actor" />
+                            </span>
+                            <span class="thread-leave-notice-action">
+                                added
+                                <template v-for="(addedActor, idx) of item.addedActors" :key="addedActor">
+                                    <strong><member-handle :actor="addedActor" /></strong><span v-if="idx < item.addedActors.length - 1">, </span>
+                                </template>
+                                to the chat
+                            </span>
+                        </system-notice>
                     </li>
                 </ul>
             </div>
@@ -128,9 +163,20 @@
         >
             <div class="thread-members-panel-header">
                 <h2 class="thread-members-panel-title">Members</h2>
-                <button type="button" class="thread-members-panel-close" @click="closeMembersPanel()">
-                    ✕
-                </button>
+                <div class="thread-members-panel-actions">
+                    <button
+                        v-if="$graffitiSession.value && canAddMembersToChat"
+                        type="button"
+                        class="thread-members-panel-add"
+                        @click="openAddMembers()"
+                        :disabled="isAddingMembers"
+                    >
+                        + Add
+                    </button>
+                    <button type="button" class="thread-members-panel-close" @click="closeMembersPanel()">
+                        ✕
+                    </button>
+                </div>
             </div>
             <ul class="thread-members-panel-list" role="list">
                 <li v-for="m of allMembers" :key="m.actor" class="thread-members-panel-row">
@@ -149,5 +195,67 @@
                 </li>
             </ul>
         </aside>
+    </div>
+
+    <div
+        v-if="isAddMembersOpen"
+        class="create-chat-modal-overlay"
+        role="presentation"
+    >
+        <div
+            class="create-chat-modal-backdrop"
+            @click="closeAddMembers()"
+        ></div>
+        <div
+            class="create-chat-modal create-chat-modal--team-roster"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-members-modal-title"
+            @click.stop
+        >
+            <div class="create-chat-modal-header">
+                <h2 id="add-members-modal-title">Add members</h2>
+                <button
+                    type="button"
+                    class="create-chat-modal-close"
+                    :disabled="isAddingMembers"
+                    @click="closeAddMembers()"
+                    aria-label="Close"
+                >
+                    ×
+                </button>
+            </div>
+            <p class="create-chat-invite-hint">
+                Pick squad groups and/or teammates to add to <strong>{{ selectedChat.title }}</strong>.
+                Current members are already in the chat.
+            </p>
+            <form @submit.prevent="addMembersToChat()">
+                <team-audience-form-field
+                    v-model="addMemberKeys"
+                    :members="addableRosterMembers"
+                    :loading="rosterDiscoverLoading"
+                    :disabled="isAddingMembers"
+                    id-prefix="add-members"
+                >
+                    Who to add
+                </team-audience-form-field>
+                <p v-if="addMembersError" class="create-chat-error">{{ addMembersError }}</p>
+                <div class="create-chat-modal-actions">
+                    <button
+                        type="button"
+                        class="create-chat-cancel-btn"
+                        :disabled="isAddingMembers"
+                        @click="closeAddMembers()"
+                    >
+                        Cancel
+                    </button>
+                    <input
+                        type="submit"
+                        :value="isAddingMembers ? 'Adding…' : 'Add'"
+                        :disabled="isAddingMembers"
+                    />
+                </div>
+            </form>
+        </div>
     </div>
 </section>

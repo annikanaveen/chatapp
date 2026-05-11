@@ -14,34 +14,167 @@
         <div class="profile-card">
             <div
                 class="profile-avatar"
+                :class="{ 'profile-avatar--photo': !!avatarVisualUrl }"
                 role="img"
-                aria-label="Profile photo (not set)"
+                :aria-label="avatarAriaLabel"
+                :style="
+                    avatarVisualUrl
+                        ? { backgroundImage: 'url(' + avatarVisualUrl + ')' }
+                        : undefined
+                "
             ></div>
-            <p
-                class="profile-handle-short"
-                :title="handleFull || undefined"
-                translate="no"
-            >
-                {{ handleDisplay }}
-            </p>
+
+            <template v-if="!headerEditing">
+                <p class="profile-display-name">{{ displayName }}</p>
+                <p
+                    class="profile-handle-short"
+                    :title="handleFull || undefined"
+                    translate="no"
+                >
+                    @{{ handleDisplay }}
+                </p>
+                <button type="button" class="profile-header-edit-btn" @click="startHeaderEdit">
+                    Edit
+                </button>
+            </template>
+
+            <template v-else>
+                <input
+                    ref="headerPhotoInput"
+                    type="file"
+                    class="profile-header-photo-input"
+                    accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                    @change="onHeaderPhotoInputChange"
+                />
+                <fieldset class="profile-header-fieldset">
+                    <label class="profile-text-label">
+                        First name
+                        <input
+                            type="text"
+                            v-model.trim="headerDraft.firstName"
+                            autocomplete="given-name"
+                        />
+                    </label>
+                    <label class="profile-text-label">
+                        Last name
+                        <input
+                            type="text"
+                            v-model.trim="headerDraft.lastName"
+                            autocomplete="family-name"
+                        />
+                    </label>
+                </fieldset>
+                <div class="profile-header-photo-actions">
+                    <button
+                        type="button"
+                        class="profile-header-photo-btn"
+                        :disabled="headerBusy"
+                        @click="triggerHeaderPhotoPicker"
+                    >
+                        {{ avatarVisualUrl && !photoRemoveRequested ? "Change photo" : "Add photo" }}
+                    </button>
+                    <button
+                        v-if="showHeaderPhotoRemove"
+                        type="button"
+                        class="profile-header-photo-btn profile-header-photo-btn--danger"
+                        :disabled="headerBusy"
+                        @click="requestRemoveHeaderPhoto"
+                    >
+                        Remove photo
+                    </button>
+                </div>
+                <p v-if="headerError" class="profile-header-error" role="alert">{{ headerError }}</p>
+                <div class="profile-header-form-actions">
+                    <button
+                        type="button"
+                        class="profile-save-btn"
+                        :disabled="headerBusy"
+                        @click="saveHeaderEdit"
+                    >
+                        {{ headerBusy ? "Saving…" : "Save" }}
+                    </button>
+                    <button
+                        type="button"
+                        class="profile-cancel-btn"
+                        :disabled="headerBusy"
+                        @click="cancelHeaderEdit"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </template>
         </div>
+
+        <router-link
+            v-if="showManageRequestsEntry"
+            :to="{ name: 'profile-team' }"
+            class="profile-manage-requests-entry"
+        >
+            <span class="profile-manage-requests-label">Manage members</span>
+            <span
+                v-if="pendingMemberRequestCount > 0"
+                class="profile-manage-requests-badge"
+                >{{ pendingMemberRequestCount > 99 ? "99+" : pendingMemberRequestCount }}</span
+            >
+            <span class="profile-manage-requests-chevron" aria-hidden="true">›</span>
+        </router-link>
+
+        <router-link
+            v-if="showViewMembersEntry"
+            :to="{ name: 'profile-team' }"
+            class="profile-manage-requests-entry profile-view-members-entry"
+        >
+            <span class="profile-manage-requests-label">View all members</span>
+            <span class="profile-manage-requests-chevron" aria-hidden="true">›</span>
+        </router-link>
 
         <section class="profile-team-section" aria-labelledby="team-heading">
             <div class="profile-team-chrome">
                 <div class="profile-team-header">
-                    <h2 id="team-heading" class="profile-team-heading">Team</h2>
-                    <button
-                        v-if="!editing"
-                        type="button"
-                        class="profile-edit-btn"
-                        @click="startEdit"
-                    >
-                        Edit
-                    </button>
+                    <h2 id="team-heading" class="profile-team-heading">
+                        Team<template v-if="teamName"
+                            ><span class="profile-team-name"> — {{ teamName }}</span></template
+                        >
+                    </h2>
+                    <div v-if="!editing" class="profile-team-header-actions">
+                        <button type="button" class="profile-edit-btn" @click="startEdit">
+                            Edit
+                        </button>
+                        <button
+                            v-if="showViewMembersEntry"
+                            type="button"
+                            class="delete-action-btn profile-team-header-leave-btn"
+                            @click="leaveTeam"
+                        >
+                            Leave team
+                        </button>
+                    </div>
                 </div>
 
-                <p v-if="saved.pendingApproval" class="profile-pending-banner" role="status">
+                <p v-if="hasPendingRoleChangeRequest" class="profile-pending-banner" role="status">
+                    Pending role change to {{ pendingRoleChangeSummary || "new role" }} until coach approval.
+                </p>
+                <p
+                    v-else-if="saved.pendingApproval"
+                    class="profile-pending-banner"
+                    role="status"
+                >
                     Pending latest changes until coach approval.
+                </p>
+                <p
+                    v-if="roleChangeDeclinedNotice"
+                    class="profile-pending-banner profile-pending-banner--declined"
+                    role="alert"
+                >
+                    {{ roleChangeDeclinedNotice }}
+                    <button
+                        type="button"
+                        class="profile-pending-banner-dismiss"
+                        @click="dismissRoleChangeDeclinedNotice"
+                        aria-label="Dismiss notice"
+                    >
+                        ×
+                    </button>
                 </p>
             </div>
 
@@ -62,6 +195,20 @@
                                 <dd>{{ teamDisplay }}</dd>
                             </div>
                         </template>
+                        <div v-if="showTeamId" class="profile-meta-row profile-meta-row--team-id">
+                            <dt>Team ID</dt>
+                            <dd class="profile-team-id-dd">
+                                <code class="profile-team-id-code" translate="no">{{ saved.teamId }}</code>
+                                <button
+                                    type="button"
+                                    class="links-copy-btn"
+                                    :aria-label="teamIdJustCopied ? 'Copied' : 'Copy team ID'"
+                                    @click="copyTeamId"
+                                >
+                                    {{ teamIdJustCopied ? "Copied!" : "Copy ID" }}
+                                </button>
+                            </dd>
+                        </div>
                     </dl>
                 </template>
 

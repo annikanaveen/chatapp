@@ -2,7 +2,11 @@
     <header class="links-header">
         <div class="links-title-stack">
             <h1 class="links-title">Attendance</h1>
-            <p class="links-subtitle">
+            <p v-if="isCoach" class="links-subtitle">
+                Review excuses submitted by athletes. Move them between <strong>Pending</strong>,
+                <strong>Excused</strong>, and <strong>Unexcused</strong>—athletes see your decision immediately.
+            </p>
+            <p v-else class="links-subtitle">
                 Submit an excuse for a tardy or absence. New submissions are <strong>Pending</strong> until a coach reviews them.
             </p>
             <label class="attendance-filter-label attendance-filter-label--under-subtitle">
@@ -16,6 +20,7 @@
         </div>
         <div class="attendance-header-actions">
             <button
+                v-if="!isCoach"
                 type="button"
                 class="links-add-section-btn"
                 @click="openSubmitExcuseModal()"
@@ -40,7 +45,9 @@
                     <h2 class="attendance-section-title">Pending</h2>
                     <span class="attendance-section-count">{{ pendingExcuses.length }}</span>
                 </header>
-                <p v-if="pendingExcuses.length === 0" class="attendance-empty">No pending excuses.</p>
+                <p v-if="pendingExcuses.length === 0" class="attendance-empty">
+                    {{ isCoach ? "No pending excuses to review." : "No pending excuses." }}
+                </p>
                 <ul v-else class="attendance-list" role="list">
                     <li v-for="excuse in pendingExcuses" :key="excuse.url" class="attendance-card" role="listitem">
                         <div class="attendance-card-top">
@@ -54,25 +61,49 @@
                                     <span class="attendance-type">{{ excuse.value.kind }}</span>
                                     <span class="attendance-meta-dot">·</span>
                                     <span>Submitted {{ formatSubmittedDate(excuse.value.published) }}</span>
+                                    <template v-if="isCoach">
+                                        <span class="attendance-meta-dot">·</span>
+                                        <span>From {{ submitterDisplayNameFor(excuse) }}</span>
+                                    </template>
                                 </p>
                             </div>
                             <div class="attendance-card-actions">
-                                <button
-                                    type="button"
-                                    class="attendance-card-action-btn"
-                                    :disabled="isSubmitting || deletingId === excuse.value.id"
-                                    @click="openEditExcuseModal(excuse)"
-                                >
-                                    Edit
-                                </button>
-                                <button
-                                    type="button"
-                                    class="delete-action-btn attendance-card-delete-btn"
-                                    :disabled="isSubmitting || deletingId === excuse.value.id"
-                                    @click="confirmDeleteExcuse(excuse)"
-                                >
-                                    Delete
-                                </button>
+                                <template v-if="isCoach">
+                                    <button
+                                        type="button"
+                                        class="attendance-card-action-btn"
+                                        :disabled="decidingId === excuse.value.id"
+                                        @click="setDecisionStatus(excuse, 'excused')"
+                                    >
+                                        Approve
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="delete-action-btn attendance-card-delete-btn"
+                                        :disabled="decidingId === excuse.value.id"
+                                        @click="setDecisionStatus(excuse, 'unexcused')"
+                                    >
+                                        Decline
+                                    </button>
+                                </template>
+                                <template v-else>
+                                    <button
+                                        type="button"
+                                        class="attendance-card-action-btn"
+                                        :disabled="isSubmitting || deletingId === excuse.value.id"
+                                        @click="openEditExcuseModal(excuse)"
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="delete-action-btn attendance-card-delete-btn"
+                                        :disabled="isSubmitting || deletingId === excuse.value.id"
+                                        @click="confirmDeleteExcuse(excuse)"
+                                    >
+                                        Delete
+                                    </button>
+                                </template>
                             </div>
                         </div>
                         <p v-if="excuse.value.details" class="attendance-card-details">{{ excuse.value.details }}</p>
@@ -100,25 +131,41 @@
                                     <span class="attendance-type">{{ excuse.value.kind }}</span>
                                     <span class="attendance-meta-dot">·</span>
                                     <span>Submitted {{ formatSubmittedDate(excuse.value.published) }}</span>
+                                    <template v-if="isCoach">
+                                        <span class="attendance-meta-dot">·</span>
+                                        <span>From {{ submitterDisplayNameFor(excuse) }}</span>
+                                    </template>
                                 </p>
                             </div>
                             <div class="attendance-card-actions">
-                                <button
-                                    type="button"
-                                    class="attendance-card-action-btn"
-                                    :disabled="isSubmitting || deletingId === excuse.value.id"
-                                    @click="openEditExcuseModal(excuse)"
-                                >
-                                    Edit
-                                </button>
-                                <button
-                                    type="button"
-                                    class="delete-action-btn attendance-card-delete-btn"
-                                    :disabled="isSubmitting || deletingId === excuse.value.id"
-                                    @click="confirmDeleteExcuse(excuse)"
-                                >
-                                    Delete
-                                </button>
+                                <template v-if="isCoach">
+                                    <button
+                                        type="button"
+                                        class="delete-action-btn attendance-card-delete-btn"
+                                        :disabled="decidingId === excuse.value.id"
+                                        @click="setDecisionStatus(excuse, 'unexcused')"
+                                    >
+                                        Move to declined
+                                    </button>
+                                </template>
+                                <template v-else>
+                                    <button
+                                        type="button"
+                                        class="attendance-card-action-btn"
+                                        :disabled="isSubmitting || deletingId === excuse.value.id"
+                                        @click="openEditExcuseModal(excuse)"
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="delete-action-btn attendance-card-delete-btn"
+                                        :disabled="isSubmitting || deletingId === excuse.value.id"
+                                        @click="confirmDeleteExcuse(excuse)"
+                                    >
+                                        Delete
+                                    </button>
+                                </template>
                             </div>
                         </div>
                         <p v-if="excuse.value.details" class="attendance-card-details">{{ excuse.value.details }}</p>
@@ -146,25 +193,41 @@
                                     <span class="attendance-type">{{ excuse.value.kind }}</span>
                                     <span class="attendance-meta-dot">·</span>
                                     <span>Submitted {{ formatSubmittedDate(excuse.value.published) }}</span>
+                                    <template v-if="isCoach">
+                                        <span class="attendance-meta-dot">·</span>
+                                        <span>From {{ submitterDisplayNameFor(excuse) }}</span>
+                                    </template>
                                 </p>
                             </div>
                             <div class="attendance-card-actions">
-                                <button
-                                    type="button"
-                                    class="attendance-card-action-btn"
-                                    :disabled="isSubmitting || deletingId === excuse.value.id"
-                                    @click="openEditExcuseModal(excuse)"
-                                >
-                                    Edit
-                                </button>
-                                <button
-                                    type="button"
-                                    class="delete-action-btn attendance-card-delete-btn"
-                                    :disabled="isSubmitting || deletingId === excuse.value.id"
-                                    @click="confirmDeleteExcuse(excuse)"
-                                >
-                                    Delete
-                                </button>
+                                <template v-if="isCoach">
+                                    <button
+                                        type="button"
+                                        class="attendance-card-action-btn"
+                                        :disabled="decidingId === excuse.value.id"
+                                        @click="setDecisionStatus(excuse, 'excused')"
+                                    >
+                                        Move to approved
+                                    </button>
+                                </template>
+                                <template v-else>
+                                    <button
+                                        type="button"
+                                        class="attendance-card-action-btn"
+                                        :disabled="isSubmitting || deletingId === excuse.value.id"
+                                        @click="openEditExcuseModal(excuse)"
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="delete-action-btn attendance-card-delete-btn"
+                                        :disabled="isSubmitting || deletingId === excuse.value.id"
+                                        @click="confirmDeleteExcuse(excuse)"
+                                    >
+                                        Delete
+                                    </button>
+                                </template>
                             </div>
                         </div>
                         <p v-if="excuse.value.details" class="attendance-card-details">{{ excuse.value.details }}</p>

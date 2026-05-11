@@ -7,41 +7,24 @@ import {
 } from "@graffiti-garden/wrapper-vue";
 import { MessageBubble } from "../../components/message/message.js";
 import { LeaveNotice } from "../../components/message/leave-notice.js";
+import { SystemNotice } from "../../components/message/system-notice.js";
 import { MemberHandle } from "../../components/member/member-handle.js";
+import { TeamAudienceFormField } from "../../components/team/team-audience-form-field.js";
 import { loadTemplate } from "../../lib/load-template.js";
 import {
-  DIRECTORY_CHANNEL,
   DEFAULT_CHAT_TITLE,
   CHAT_CREATE_DISCOVER_SCHEMA,
   CHAT_DELETE_DISCOVER_SCHEMA,
   CHAT_MESSAGE_DISCOVER_SCHEMA,
 } from "./constants.js";
+import { useTeamDirectoryChannel } from "../../lib/use-team-directory-channel.js";
 import { setLastOpenedForChannel, getLastOpenedMap } from "../../lib/chat-last-opened.js";
-import { setCachedHandleForActor } from "../../lib/actor-handle-cache.js";
-
-const GRAFFITI_ACTOR_SUFFIX = ".graffiti.actor";
-
-/**
- * Turns a short invite like "annika" into "annika.graffiti.actor" for handleToActor.
- * Leaves values that already end with ".graffiti.actor" unchanged.
- */
-function normalizeGraffitiHandleForLookup(segment) {
-  const s = String(segment || "").trim();
-  if (!s) {
-    return "";
-  }
-  if (s.toLowerCase().endsWith(GRAFFITI_ACTOR_SUFFIX)) {
-    return s;
-  }
-  return `${s}${GRAFFITI_ACTOR_SUFFIX}`;
-}
-
-function parseInviteHandles(raw) {
-  return String(raw || "")
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
+import { expandAudienceKeys } from "../../lib/team-audience-resolve.js";
+import { useTeamRosterPickerRows } from "../../lib/use-team-roster-picker.js";
+import {
+  defaultTeamGroupSlugFromChatCreateValue,
+  sortChatsWithPinnedDefaultGroups,
+} from "../../lib/team-groups.js";
 
 function clipHandleToShortLabel(handle) {
   if (handle === undefined || handle === null) {
@@ -165,16 +148,39 @@ function randomChannelId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+/** Latest Create-Chat Graffiti object per channel (`published` wins). */
+function latestCreateChatObjectPerChannel(objects) {
+  const map = new Map();
+  for (const object of objects || []) {
+    const v = object?.value;
+    if (!v || v.activity !== "Create" || v.type !== "Chat" || !v.channel) {
+      continue;
+    }
+    const ch = v.channel;
+    const pub = Number(v.published) || 0;
+    const prev = map.get(ch);
+    if (!prev || pub > (Number(prev.value.published) || 0)) {
+      map.set(ch, object);
+    }
+  }
+  return map;
+}
+
 function threadSetup() {
   const graffiti = useGraffiti();
   const session = useGraffitiSession();
+  const teamDirectory = useTeamDirectoryChannel();
   const route = useRoute();
   const router = useRouter();
+  const { rosterMembers, rosterDiscoverLoading } = useTeamRosterPickerRows(
+    teamDirectory,
+    session,
+  );
 
   function normalizeChannel(channelParam) {
     return typeof channelParam === "string" && channelParam.trim()
       ? channelParam
-      : DIRECTORY_CHANNEL;
+      : teamDirectory.value;
   }
 
   const channel = computed(() => {
@@ -213,9 +219,6 @@ function threadSetup() {
   }
 
   const isSending = ref(false);
-  const canSendMessage = computed(() => {
-    return Boolean(session.value && myMessage.value.trim());
-  });
 
   async function sendMessage() {
     if (!canSendMessage.value) {
@@ -232,7 +235,7 @@ function threadSetup() {
         channels: [channel.value],
       };
       const allowed = memberActorsForMessages.value;
-      if (allowed) {
+      if (allowed != null) {
         partial.allowed = uniqueActors(allowed);
       }
       await graffiti.post(partial, session.value);
@@ -246,14 +249,14 @@ function threadSetup() {
     objects: chatObjects,
     isFirstPoll: areDirectoryChatsLoading,
   } = useGraffitiDiscover(
-    [DIRECTORY_CHANNEL],
+    () => [teamDirectory.value],
     CHAT_CREATE_DISCOVER_SCHEMA,
     () => session.value,
   );
 
   const { objects: chatLeaveObjects, isFirstPoll: areLeaveObjectsLoading } =
     useGraffitiDiscover(
-      [DIRECTORY_CHANNEL],
+      () => [teamDirectory.value],
       {
         properties: {
           value: {
@@ -272,7 +275,7 @@ function threadSetup() {
 
   const { objects: chatDeleteObjects, isFirstPoll: areDeleteObjectsLoading } =
     useGraffitiDiscover(
-      [DIRECTORY_CHANNEL],
+      () => [teamDirectory.value],
       CHAT_DELETE_DISCOVER_SCHEMA,
       () => session.value,
     );
@@ -294,6 +297,66 @@ function threadSetup() {
     });
   });
 
+  /**
+   * Compare successive Create-Chat objects for this channel and synthesize
+   * "rename" and "add member" timeline events. The earliest visible Create-Chat
+   * for a viewer is treated as the chat's starting state (no events emitted for
+   * its title or initial members).
+   */
+  const renameAndAddEventsForChannel = computed(() => {
+    const events = [];
+    const creates = chatObjects.value
+      .filter((o) => o?.value?.channel === channel.value)
+      .toSorted((a, b) => {
+        const ap = Number(a.value.published) || 0;
+        const bp = Number(b.value.published) || 0;
+        if (ap !== bp) {
+          return ap - bp;
+        }
+        return String(a.url).localeCompare(String(b.url));
+      });
+    if (creates.length < 2) {
+      return events;
+    }
+    for (let i = 1; i < creates.length; i++) {
+      const prev = creates[i - 1];
+      const cur = creates[i];
+      const prevValue = prev?.value || {};
+      const curValue = cur?.value || {};
+      const published = Number(curValue.published) || 0;
+
+      const prevTitle = String(prevValue.title || "").trim();
+      const curTitle = String(curValue.title || "").trim();
+      if (curTitle && prevTitle !== curTitle) {
+        events.push({
+          kind: "rename",
+          published,
+          sortKey: `${cur.url}-rename`,
+          actor: cur.actor,
+          oldTitle: prevTitle,
+          newTitle: curTitle,
+        });
+      }
+
+      const prevMemberSet = new Set(
+        Array.isArray(prevValue.memberActors) ? prevValue.memberActors : [],
+      );
+      const addedActors = (
+        Array.isArray(curValue.memberActors) ? curValue.memberActors : []
+      ).filter((a) => typeof a === "string" && a && !prevMemberSet.has(a));
+      if (addedActors.length > 0) {
+        events.push({
+          kind: "add",
+          published,
+          sortKey: `${cur.url}-add`,
+          actor: cur.actor,
+          addedActors,
+        });
+      }
+    }
+    return events;
+  });
+
   const threadTimeline = computed(() => {
     const messages = sortedMessageObjects.value.map((object) => {
       return {
@@ -311,7 +374,8 @@ function threadSetup() {
         object,
       };
     });
-    return [...messages, ...leaves].toSorted((a, b) => {
+    const renameAndAddEvents = renameAndAddEventsForChannel.value;
+    return [...messages, ...leaves, ...renameAndAddEvents].toSorted((a, b) => {
       if (a.published !== b.published) {
         return a.published - b.published;
       }
@@ -361,12 +425,45 @@ function threadSetup() {
   });
 
   const memberActorsForMessages = computed(() => {
-    const actors = latestCreateForChannel.value?.value?.memberActors;
+    const v = latestCreateForChannel.value?.value;
+    if (!v) {
+      return null;
+    }
+    const actors = v.memberActors;
+    const defSlug = defaultTeamGroupSlugFromChatCreateValue(v);
+    if (typeof defSlug === "string" && defSlug) {
+      return Array.isArray(actors) ? actors : [];
+    }
     return Array.isArray(actors) && actors.length > 0 ? actors : null;
   });
 
+  const viewerInChatMembers = computed(() => {
+    const me = session.value?.actor;
+    if (!me) {
+      return false;
+    }
+    const allowed = memberActorsForMessages.value;
+    if (allowed == null) {
+      return true;
+    }
+    return allowed.includes(me);
+  });
+
+  const canSendMessage = computed(() => {
+    return Boolean(
+      session.value &&
+      myMessage.value.trim() &&
+      viewerInChatMembers.value,
+    );
+  });
+
   const isPrivateGroupChat = computed(() => {
-    return Boolean(memberActorsForMessages.value);
+    const v = latestCreateForChannel.value?.value;
+    if (defaultTeamGroupSlugFromChatCreateValue(v)) {
+      return true;
+    }
+    const allowed = memberActorsForMessages.value;
+    return Array.isArray(allowed) && allowed.length > 0;
   });
 
   const isMembersPanelOpen = ref(false);
@@ -409,14 +506,28 @@ function threadSetup() {
     return members > 3 ? members - 3 : 0;
   });
 
+  const latestThreadCreateByChannel = computed(() =>
+    latestCreateChatObjectPerChannel(chatObjects.value),
+  );
+
   const chats = computed(() => {
     const byChannel = new Map();
     for (const object of chatObjects.value) {
-      byChannel.set(object.value.channel, {
-        channel: object.value.channel,
-        title: object.value.title,
-        published: object.value.published,
-      });
+      const v = object.value;
+      if (!v || v.activity !== "Create" || v.type !== "Chat" || !v.channel) {
+        continue;
+      }
+      const ch = v.channel;
+      const pub = Number(v.published) || 0;
+      const prev = byChannel.get(ch);
+      const prevPub = prev ? Number(prev.published) || 0 : -1;
+      if (!prev || pub > prevPub) {
+        byChannel.set(ch, {
+          channel: ch,
+          title: v.title,
+          published: pub,
+        });
+      }
     }
     return [...byChannel.values()].toSorted((a, b) => {
       return b.published - a.published;
@@ -441,7 +552,9 @@ function threadSetup() {
   });
 
   const availableChats = computed(() => {
-    const visibleChats = [{ channel: DIRECTORY_CHANNEL, title: DEFAULT_CHAT_TITLE }];
+    const visibleChats = [{ channel: teamDirectory.value, title: DEFAULT_CHAT_TITLE }];
+    const viewer = session.value?.actor;
+    const latestMap = latestThreadCreateByChannel.value;
 
     for (const chat of chats.value) {
       if (leftChannels.value.has(chat.channel)) {
@@ -450,16 +563,25 @@ function threadSetup() {
       if (deletedChannels.value.has(chat.channel)) {
         continue;
       }
+      const latestObj = latestMap.get(chat.channel);
+      const v = latestObj?.value;
+      const squadSlug = defaultTeamGroupSlugFromChatCreateValue(v);
+      if (typeof squadSlug === "string" && squadSlug && viewer) {
+        const arr = Array.isArray(v.memberActors) ? v.memberActors : [];
+        if (!arr.includes(viewer)) {
+          continue;
+        }
+      }
       visibleChats.push(chat);
     }
 
-    return visibleChats;
+    return sortChatsWithPinnedDefaultGroups(visibleChats, teamDirectory.value, latestMap);
   });
 
   const selectedChat = computed(() => {
     return (
       availableChats.value.find((chat) => chat.channel === channel.value) ?? {
-        channel: DIRECTORY_CHANNEL,
+        channel: teamDirectory.value,
         title: DEFAULT_CHAT_TITLE,
       }
     );
@@ -505,15 +627,33 @@ function threadSetup() {
 
   const isLeavingChat = ref(false);
   const canLeaveSelectedChat = computed(() => {
-    return Boolean(session.value && channel.value !== DIRECTORY_CHANNEL);
+    if (!session.value || channel.value === teamDirectory.value) {
+      return false;
+    }
+    const v = latestCreateForChannel.value?.value;
+    if (defaultTeamGroupSlugFromChatCreateValue(v)) {
+      return false;
+    }
+    return true;
   });
 
   const chatCreatorActor = computed(() => {
-    return latestCreateForChannel.value?.actor ?? null;
+    let earliest = null;
+    for (const object of chatObjects.value) {
+      if (object.value.channel !== channel.value) {
+        continue;
+      }
+      const pub = Number(object.value.published) || 0;
+      const bestPub = earliest ? Number(earliest.value.published) || 0 : Infinity;
+      if (!earliest || pub < bestPub) {
+        earliest = object;
+      }
+    }
+    return earliest?.actor ?? null;
   });
 
   const canDeleteEntireChat = computed(() => {
-    if (!session.value || channel.value === DIRECTORY_CHANNEL) {
+    if (!session.value || channel.value === teamDirectory.value) {
       return false;
     }
     if (!latestCreateForChannel.value) {
@@ -524,6 +664,225 @@ function threadSetup() {
   });
 
   const isDeletingChat = ref(false);
+
+  const canRenameSelectedChat = computed(() => {
+    if (!session.value || channel.value === teamDirectory.value) {
+      return false;
+    }
+    const v = latestCreateForChannel.value?.value;
+    if (!v) {
+      return false;
+    }
+    if (defaultTeamGroupSlugFromChatCreateValue(v)) {
+      return false;
+    }
+    if (!viewerInChatMembers.value) {
+      return false;
+    }
+    return true;
+  });
+
+  const isRenamingChat = ref(false);
+
+  const canAddMembersToChat = computed(() => {
+    return canRenameSelectedChat.value;
+  });
+
+  const isAddMembersOpen = ref(false);
+  const addMemberKeys = ref([]);
+  const addMembersError = ref("");
+  const isAddingMembers = ref(false);
+
+  const currentChatActorSet = computed(() => {
+    const set = new Set();
+    const actors = memberActorsForMessages.value;
+    if (Array.isArray(actors)) {
+      for (const a of actors) {
+        if (typeof a === "string" && a) {
+          set.add(a);
+        }
+      }
+    }
+    return set;
+  });
+
+  const addableRosterMembers = computed(() => {
+    const current = currentChatActorSet.value;
+    return (rosterMembers.value || []).filter((m) => {
+      const actor = String(m?.actor || "").trim();
+      return actor && !current.has(actor);
+    });
+  });
+
+  function openAddMembers() {
+    if (!canAddMembersToChat.value) {
+      return;
+    }
+    addMemberKeys.value = [];
+    addMembersError.value = "";
+    isAddMembersOpen.value = true;
+  }
+
+  function closeAddMembers() {
+    if (isAddingMembers.value) {
+      return;
+    }
+    isAddMembersOpen.value = false;
+  }
+
+  function onAddMembersKeydown(event) {
+    if (event.key === "Escape" && isAddMembersOpen.value && !isAddingMembers.value) {
+      closeAddMembers();
+    }
+  }
+
+  onMounted(() => {
+    window.addEventListener("keydown", onAddMembersKeydown);
+  });
+
+  onUnmounted(() => {
+    window.removeEventListener("keydown", onAddMembersKeydown);
+  });
+
+  watch(addMemberKeys, () => {
+    addMembersError.value = "";
+  }, { deep: true });
+
+  watch(
+    () => channel.value,
+    () => {
+      isAddMembersOpen.value = false;
+      addMemberKeys.value = [];
+      addMembersError.value = "";
+    },
+  );
+
+  async function addMembersToChat() {
+    if (!canAddMembersToChat.value) {
+      return;
+    }
+    addMembersError.value = "";
+
+    const currentValue = latestCreateForChannel.value?.value;
+    if (!currentValue) {
+      return;
+    }
+
+    const invitedActors = expandAudienceKeys(
+      addMemberKeys.value || [],
+      rosterMembers.value,
+      { mode: "exact" },
+    );
+    const current = currentChatActorSet.value;
+    const newActors = invitedActors.filter((a) => !current.has(a));
+
+    if (newActors.length === 0) {
+      addMembersError.value = "Select at least one new member to add.";
+      return;
+    }
+
+    const mergedMembers = uniqueActors([
+      ...(Array.isArray(currentValue.memberActors) ? currentValue.memberActors : []),
+      ...newActors,
+    ]);
+    const mergedKeys = (() => {
+      const next = new Set(
+        Array.isArray(currentValue.audienceKeys) ? currentValue.audienceKeys : [],
+      );
+      for (const k of addMemberKeys.value || []) {
+        if (typeof k === "string" && k) {
+          next.add(k);
+        }
+      }
+      return [...next];
+    })();
+
+    isAddingMembers.value = true;
+    try {
+      const value = {
+        activity: "Create",
+        type: "Chat",
+        channel: channel.value,
+        title: currentValue.title,
+        published: Date.now(),
+        memberActors: mergedMembers,
+      };
+      if (mergedKeys.length > 0) {
+        value.audienceKeys = mergedKeys;
+      }
+      await graffiti.post(
+        {
+          value,
+          channels: [teamDirectory.value],
+          allowed: mergedMembers,
+        },
+        session.value,
+      );
+      isAddMembersOpen.value = false;
+      addMemberKeys.value = [];
+    } catch (error) {
+      console.error(error);
+      addMembersError.value =
+        error?.message || "Could not add members. Try again.";
+    } finally {
+      isAddingMembers.value = false;
+    }
+  }
+
+  async function renameChat() {
+    if (!canRenameSelectedChat.value) {
+      return;
+    }
+
+    const currentValue = latestCreateForChannel.value?.value;
+    if (!currentValue) {
+      return;
+    }
+    const currentTitle = String(currentValue.title || "").trim();
+
+    const proposedRaw = window.prompt("New chat name:", currentTitle);
+    if (proposedRaw === null) {
+      return;
+    }
+    const nextTitle = String(proposedRaw).trim();
+    if (!nextTitle || nextTitle === currentTitle) {
+      return;
+    }
+
+    const recipients = memberActorsForMessages.value;
+
+    isRenamingChat.value = true;
+    try {
+      const value = {
+        activity: "Create",
+        type: "Chat",
+        channel: channel.value,
+        title: nextTitle,
+        published: Date.now(),
+      };
+      if (Array.isArray(currentValue.memberActors)) {
+        value.memberActors = uniqueActors(currentValue.memberActors);
+      }
+      if (
+        Array.isArray(currentValue.audienceKeys) &&
+        currentValue.audienceKeys.length > 0
+      ) {
+        value.audienceKeys = [...currentValue.audienceKeys];
+      }
+
+      const partial = {
+        value,
+        channels: [teamDirectory.value],
+      };
+      if (Array.isArray(recipients) && recipients.length > 0) {
+        partial.allowed = uniqueActors(recipients);
+      }
+
+      await graffiti.post(partial, session.value);
+    } finally {
+      isRenamingChat.value = false;
+    }
+  }
 
   async function deleteEntireChat() {
     if (!canDeleteEntireChat.value) {
@@ -559,7 +918,7 @@ function threadSetup() {
             channel: channel.value,
             published: Date.now(),
           },
-          channels: [DIRECTORY_CHANNEL],
+          channels: [teamDirectory.value],
           allowed: recipients,
         },
         session.value,
@@ -585,7 +944,7 @@ function threadSetup() {
             channel: channel.value,
             published: Date.now(),
           },
-          channels: [DIRECTORY_CHANNEL],
+          channels: [teamDirectory.value],
         },
         session.value,
       );
@@ -634,10 +993,14 @@ function threadSetup() {
     selectedChat,
     canLeaveSelectedChat,
     canDeleteEntireChat,
+    canRenameSelectedChat,
+    canAddMembersToChat,
     isLeavingChat,
     isDeletingChat,
+    isRenamingChat,
     leaveChat,
     deleteEntireChat,
+    renameChat,
     channel,
     goToChannelList,
     isPrivateGroupChat,
@@ -647,19 +1010,29 @@ function threadSetup() {
     allMembers,
     compactMembers,
     remainingMemberCount,
+    isAddMembersOpen,
+    addMemberKeys,
+    addMembersError,
+    isAddingMembers,
+    addableRosterMembers,
+    rosterDiscoverLoading,
+    openAddMembers,
+    closeAddMembers,
+    addMembersToChat,
   };
 }
 
 function directorySetup() {
   const graffiti = useGraffiti();
   const session = useGraffitiSession();
+  const teamDirectory = useTeamDirectoryChannel();
   const route = useRoute();
   const router = useRouter();
 
   function normalizeChannel(channelParam) {
     return typeof channelParam === "string" && channelParam.trim()
       ? channelParam
-      : DIRECTORY_CHANNEL;
+      : teamDirectory.value;
   }
 
   function chatRoute(chatChannel) {
@@ -670,13 +1043,16 @@ function directorySetup() {
   }
 
   const newChatTitle = ref("");
-  const newChatInviteHandles = ref("");
+  const newChatAudienceKeys = ref([]);
   const chatCreateError = ref("");
   const isCreatingChat = ref(false);
   const isCreateChatOpen = ref(false);
 
+  const { rosterMembers, rosterDiscoverLoading } = useTeamRosterPickerRows(teamDirectory, session);
+
   function openCreateChat() {
     chatCreateError.value = "";
+    newChatAudienceKeys.value = [];
     isCreateChatOpen.value = true;
   }
 
@@ -701,9 +1077,13 @@ function directorySetup() {
     window.removeEventListener("keydown", onCreateChatKeydown);
   });
 
-  watch([newChatTitle, newChatInviteHandles], () => {
-    chatCreateError.value = "";
-  });
+  watch(
+    [newChatTitle, newChatAudienceKeys],
+    () => {
+      chatCreateError.value = "";
+    },
+    { deep: true },
+  );
 
   async function newChat() {
     chatCreateError.value = "";
@@ -722,44 +1102,27 @@ function directorySetup() {
     const createdChannel = randomChannelId();
     isCreatingChat.value = true;
     try {
-      const handles = parseInviteHandles(newChatInviteHandles.value);
-      const memberActors = [session.value.actor];
-
-      for (const handle of handles) {
-        const lookupHandle = normalizeGraffitiHandleForLookup(handle);
-        let actor;
-        try {
-          actor = await graffiti.handleToActor(lookupHandle);
-        } catch (error) {
-          console.error(error);
-          chatCreateError.value = `Could not look up "${handle}". Check your connection and try again.`;
-          return;
-        }
-        if (actor == null) {
-          chatCreateError.value = `Unknown Graffiti username: "${handle}"`;
-          return;
-        }
-        const short = clipHandleToShortLabel(lookupHandle) || clipHandleToShortLabel(handle);
-        if (short) {
-          setCachedHandleForActor(actor, short);
-        }
-        memberActors.push(actor);
-      }
-
-      const allowedMembers = uniqueActors(memberActors);
+      const inviteActors = expandAudienceKeys(newChatAudienceKeys.value || [], rosterMembers.value, {
+        mode: "exact",
+      });
+      const allowedMembers = uniqueActors([session.value.actor, ...inviteActors]);
 
       try {
+        const value = {
+          activity: "Create",
+          type: "Chat",
+          channel: createdChannel,
+          title,
+          published: Date.now(),
+          memberActors: allowedMembers,
+        };
+        if (newChatAudienceKeys.value?.length) {
+          value.audienceKeys = [...newChatAudienceKeys.value];
+        }
         await graffiti.post(
           {
-            value: {
-              activity: "Create",
-              type: "Chat",
-              channel: createdChannel,
-              title,
-              published: Date.now(),
-              memberActors: allowedMembers,
-            },
-            channels: [DIRECTORY_CHANNEL],
+            value,
+            channels: [teamDirectory.value],
             allowed: allowedMembers,
           },
           session.value,
@@ -779,26 +1142,26 @@ function directorySetup() {
         chatCreateError.value =
           "The chat was created. Open it from the list below if you are not redirected.";
         newChatTitle.value = "";
-        newChatInviteHandles.value = "";
+        newChatAudienceKeys.value = [];
         return;
       }
 
       isCreateChatOpen.value = false;
       newChatTitle.value = "";
-      newChatInviteHandles.value = "";
+      newChatAudienceKeys.value = [];
     } finally {
       isCreatingChat.value = false;
     }
   }
 
   const { objects: chatObjects, isFirstPoll: areChatsLoading } = useGraffitiDiscover(
-    [DIRECTORY_CHANNEL],
+    () => [teamDirectory.value],
     CHAT_CREATE_DISCOVER_SCHEMA,
     () => session.value,
   );
 
   const { objects: chatLeaveObjects } = useGraffitiDiscover(
-    [DIRECTORY_CHANNEL],
+    () => [teamDirectory.value],
     {
       properties: {
         value: {
@@ -816,7 +1179,7 @@ function directorySetup() {
   );
 
   const { objects: chatDeleteObjects } = useGraffitiDiscover(
-    [DIRECTORY_CHANNEL],
+    () => [teamDirectory.value],
     CHAT_DELETE_DISCOVER_SCHEMA,
     () => session.value,
   );
@@ -832,14 +1195,29 @@ function directorySetup() {
     return set;
   });
 
+  const latestDirectoryCreateByChannel = computed(() =>
+    latestCreateChatObjectPerChannel(chatObjects.value),
+  );
+
   const chats = computed(() => {
     const byChannel = new Map();
+    const latestMap = latestDirectoryCreateByChannel.value;
     for (const object of chatObjects.value) {
-      byChannel.set(object.value.channel, {
-        channel: object.value.channel,
-        title: object.value.title,
-        published: object.value.published,
-      });
+      const v = object.value;
+      if (!v || v.activity !== "Create" || v.type !== "Chat" || !v.channel) {
+        continue;
+      }
+      const ch = v.channel;
+      const pub = Number(v.published) || 0;
+      const prev = byChannel.get(ch);
+      const prevPub = prev ? Number(prev.published) || 0 : -1;
+      if (!prev || pub > prevPub) {
+        byChannel.set(ch, {
+          channel: ch,
+          title: v.title,
+          published: pub,
+        });
+      }
     }
     return [...byChannel.values()].toSorted((a, b) => {
       return b.published - a.published;
@@ -864,7 +1242,9 @@ function directorySetup() {
   });
 
   const availableChats = computed(() => {
-    const visibleChats = [{ channel: DIRECTORY_CHANNEL, title: DEFAULT_CHAT_TITLE }];
+    const visibleChats = [{ channel: teamDirectory.value, title: DEFAULT_CHAT_TITLE }];
+    const viewer = session.value?.actor;
+    const latestMap = latestDirectoryCreateByChannel.value;
 
     for (const chat of chats.value) {
       if (leftChannels.value.has(chat.channel)) {
@@ -873,10 +1253,19 @@ function directorySetup() {
       if (deletedChannels.value.has(chat.channel)) {
         continue;
       }
+      const latestObj = latestMap.get(chat.channel);
+      const v = latestObj?.value;
+      const squadSlug = defaultTeamGroupSlugFromChatCreateValue(v);
+      if (typeof squadSlug === "string" && squadSlug && viewer) {
+        const arr = Array.isArray(v.memberActors) ? v.memberActors : [];
+        if (!arr.includes(viewer)) {
+          continue;
+        }
+      }
       visibleChats.push(chat);
     }
 
-    return visibleChats;
+    return sortChatsWithPinnedDefaultGroups(visibleChats, teamDirectory.value, latestMap);
   });
 
   const previewChannelIds = computed(() => {
@@ -938,7 +1327,9 @@ function directorySetup() {
 
   return {
     newChatTitle,
-    newChatInviteHandles,
+    newChatAudienceKeys,
+    rosterMembers,
+    rosterDiscoverLoading,
     chatCreateError,
     isCreatingChat,
     isCreateChatOpen,
@@ -960,6 +1351,7 @@ export async function createMessagesDirectoryView() {
   return {
     template,
     setup: directorySetup,
+    components: { TeamAudienceFormField },
   };
 }
 
@@ -973,7 +1365,9 @@ export async function createMessagesThreadView() {
     components: {
       MessageBubble,
       LeaveNotice,
+      SystemNotice,
       MemberHandle,
+      TeamAudienceFormField,
     },
   };
 }

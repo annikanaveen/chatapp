@@ -1,0 +1,24 @@
+<section class="waiting-approval-view">
+    <p v-if="$graffitiSession.value === undefined" class="waiting-approval-loading">
+        <em>Loading…</em>
+    </p>
+
+    <template v-else-if="$graffitiSession.value">
+        <h1 class="waiting-approval-title">Request pending</h1>
+        <p class="waiting-approval-lead">
+            Your request to join this team has been sent to the coach who created the team ID.
+            You’ll get access as soon as they approve your request.
+        </p>
+        <p v-if="errorMessage" class="waiting-approval-error" role="alert">{{ errorMessage }}</p>
+        <p class="waiting-approval-hint">
+            <em>This page updates automatically when your request is reviewed.</em>
+        </p>
+        <button
+            type="button"
+            class="waiting-approval-logout"
+            @click="$graffiti.logout($graffitiSession.value)"
+        >
+            Log out
+        </button>
+    </template>
+</section>

@@ -1,0 +1,75 @@
+<section class="member-requests-page">
+    <header class="member-requests-page-header">
+        <button type="button" class="member-requests-back" @click="goBack">‹ Back</button>
+        <h1 class="member-requests-page-title">{{ pageTitle }}</h1>
+        <p class="member-requests-page-subtitle">
+            {{ pageSubtitle }}
+        </p>
+    </header>
+
+    <div class="member-requests-page-scroll">
+        <p v-if="isDiscoverLoading" class="member-requests-loading"><em>Loading…</em></p>
+
+        <p v-else-if="!pageReady" class="member-requests-denied">
+            This team could not be loaded, or you are not on a team space yet.
+        </p>
+
+        <template v-else>
+            <member-pending-requests-panel
+                v-if="showPendingRequestsPanel"
+                :pending-rows="pendingRows"
+                :acting-on="actingOn"
+                @approve="approve"
+                @reject="reject"
+            />
+            <section
+                v-if="showPendingRequestsPanel"
+                class="member-requests-section"
+                aria-labelledby="role-change-requests-heading"
+            >
+                <h2 id="role-change-requests-heading" class="member-requests-section-title">
+                    Role change requests
+                </h2>
+                <ul v-if="roleChangeRows.length > 0" class="member-requests-list">
+                    <li
+                        v-for="row in roleChangeRows"
+                        :key="row.requestId"
+                        class="member-requests-card"
+                    >
+                        <div class="member-requests-card-main">
+                            <p class="member-requests-name">{{ row.displayName }}</p>
+                            <p class="member-requests-tags">
+                                Requesting: {{ row.roleLabel }} · {{ row.sportLabel }} · {{ row.teamLabel }}
+                            </p>
+                            <p class="member-requests-handle" translate="no">
+                                @{{ row.handleFallback }}
+                            </p>
+                        </div>
+                        <div class="member-requests-card-actions">
+                            <button
+                                type="button"
+                                class="member-requests-btn member-requests-btn--approve"
+                                :disabled="actingOnRoleChange.has(row.requesterActor)"
+                                @click="approveRoleChange(row)"
+                            >
+                                Approve
+                            </button>
+                            <button
+                                type="button"
+                                class="member-requests-btn member-requests-btn--reject"
+                                :disabled="actingOnRoleChange.has(row.requesterActor)"
+                                @click="rejectRoleChange(row)"
+                            >
+                                Decline
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+                <p v-else class="member-requests-empty">No pending role change requests.</p>
+            </section>
+            <current-team-members-panel :member-rows="memberRows" />
+        </template>
+    </div>
+
+    <p v-if="actionError" class="member-requests-action-error" role="alert">{{ actionError }}</p>
+</section>

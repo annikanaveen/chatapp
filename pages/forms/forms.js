@@ -1,64 +1,55 @@
 import { ref, computed, watch, onUnmounted } from "vue";
 import { useGraffiti, useGraffitiSession, useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
 import { loadTemplate } from "../../lib/load-template.js";
-import { setCachedHandleForActor } from "../../lib/actor-handle-cache.js";
 import {
-  DIRECTORY_CHANNEL,
   FORM_DEFINITION_DISCOVER_SCHEMA,
   FORM_RESPONSE_DISCOVER_SCHEMA,
 } from "../messages/constants.js";
+import { useTeamDirectoryChannel } from "../../lib/use-team-directory-channel.js";
+import {
+  expandAudienceKeys,
+  audienceKeysForEdit,
+  summarizeAudienceKeys,
+} from "../../lib/team-audience-resolve.js";
+import { useTeamRosterPickerRows } from "../../lib/use-team-roster-picker.js";
+import { useViewerTeamRole } from "../../lib/use-viewer-team-role.js";
+import { TeamAudienceFormField } from "../../components/team/team-audience-form-field.js";
+import { isAudienceObjectVisibleToViewer } from "../../lib/audience-visibility.js";
+import { loadUserTeamProfile } from "../../lib/user-team-profile.js";
+import { deriveTeamGroups } from "../../lib/team-groups.js";
 
-const GRAFFITI_ACTOR_SUFFIX = ".graffiti.actor";
-
-function normalizeGraffitiHandleForLookup(segment) {
-  const s = String(segment || "").trim();
-  if (!s) {
-    return "";
-  }
-  if (s.toLowerCase().endsWith(GRAFFITI_ACTOR_SUFFIX)) {
-    return s;
-  }
-  return `${s}${GRAFFITI_ACTOR_SUFFIX}`;
-}
-
-function parseInviteHandles(raw) {
-  return String(raw || "")
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function clipHandleToShortLabel(handle) {
-  if (handle === undefined || handle === null) {
-    return null;
-  }
-  const trimmed = String(handle).trim();
-  if (!trimmed) {
-    return "";
-  }
-  const dot = trimmed.indexOf(".");
-  if (dot === -1) {
-    return trimmed;
-  }
-  return trimmed.slice(0, dot) || trimmed;
-}
-
-function formVisibleToSessionActor(formObject, sessionActor) {
+/**
+ * Forms are broadcast to the team directory channel (no Graffiti `allowed`),
+ * so all team members can discover them. Visibility is enforced client-side:
+ * if a form was assigned to a group (e.g., "all swimmers") via audienceKeys,
+ * any current swimmer should see it — including ones who joined after the
+ * form was created. Falls back to the static `assignedActors` snapshot for
+ * forms targeting hand-picked individuals.
+ */
+function formVisibleToSessionActor(formObject, sessionActor, sessionGroups) {
   if (!formObject?.value || !sessionActor) {
     return false;
   }
-  if (formObject.actor === sessionActor) {
-    return true;
-  }
-  const actors = formObject.value.assignedActors;
-  if (!Array.isArray(actors) || actors.length === 0) {
-    return true;
-  }
-  return actors.includes(sessionActor);
+  const v = formObject.value;
+  return isAudienceObjectVisibleToViewer(
+    {
+      audienceKeys: v.audienceKeys,
+      memberActors: v.assignedActors,
+      creatorActor: formObject.actor,
+    },
+    { viewerActor: sessionActor, viewerGroups: sessionGroups || [] },
+  );
 }
 
-function formatAssignmentSummary(formObject) {
+function buildFormAssignmentSummary(formObject, rosterRows) {
   const v = formObject?.value;
+  const keys = v?.audienceKeys;
+  if (Array.isArray(keys) && keys.length) {
+    const s = summarizeAudienceKeys(keys, rosterRows || []);
+    if (s) {
+      return s;
+    }
+  }
   const actors = v?.assignedActors;
   if (!Array.isArray(actors) || actors.length === 0) {
     return "Everyone";
@@ -68,40 +59,6 @@ function formatAssignmentSummary(formObject) {
     return handles.join(", ");
   }
   return `${actors.length} member(s)`;
-}
-
-async function resolveAssignmentsFromInviteField(graffiti, rawText) {
-  const handles = parseInviteHandles(rawText);
-  if (handles.length === 0) {
-    return { assignedActors: [], assignedHandles: [] };
-  }
-  const assignedActors = [];
-  const assignedHandles = [];
-  const seen = new Set();
-  for (const handle of handles) {
-    const lookupHandle = normalizeGraffitiHandleForLookup(handle);
-    let actor;
-    try {
-      actor = await graffiti.handleToActor(lookupHandle);
-    } catch {
-      throw new Error(`Could not look up “${handle}”. Check your connection and try again.`);
-    }
-    if (actor == null) {
-      throw new Error(`Unknown Graffiti username: “${handle}”`);
-    }
-    if (seen.has(actor)) {
-      continue;
-    }
-    seen.add(actor);
-    const short =
-      clipHandleToShortLabel(lookupHandle) || clipHandleToShortLabel(handle) || String(handle).trim();
-    if (short) {
-      setCachedHandleForActor(actor, short);
-    }
-    assignedActors.push(actor);
-    assignedHandles.push(short || String(handle).trim());
-  }
-  return { assignedActors, assignedHandles };
 }
 
 function randomId() {
@@ -216,15 +173,18 @@ function sortHistoryForms(a, b) {
 function formsSetup() {
   const graffiti = useGraffiti();
   const session = useGraffitiSession();
+  const teamDirectory = useTeamDirectoryChannel();
+  const { rosterMembers, rosterDiscoverLoading } = useTeamRosterPickerRows(teamDirectory, session);
+  const { isCoach } = useViewerTeamRole();
 
   const { objects: formDefRaw, isFirstPoll: formDefFirstPoll } = useGraffitiDiscover(
-    [DIRECTORY_CHANNEL],
+    () => [teamDirectory.value],
     FORM_DEFINITION_DISCOVER_SCHEMA,
     () => session.value,
   );
 
   const { objects: formResponseRaw, isFirstPoll: formResponseFirstPoll } = useGraffitiDiscover(
-    [DIRECTORY_CHANNEL],
+    () => [teamDirectory.value],
     FORM_RESPONSE_DISCOVER_SCHEMA,
     () => session.value,
   );
@@ -237,12 +197,24 @@ function formsSetup() {
     return pickLatestById(defs);
   });
 
+  const viewerTeamGroups = computed(() => {
+    const actor = session.value?.actor;
+    if (!actor) {
+      return [];
+    }
+    const p = loadUserTeamProfile(actor);
+    return deriveTeamGroups({ role: p.role, sport: p.sport, team: p.team });
+  });
+
   const visibleFormObjects = computed(() => {
     const actor = session.value?.actor;
     if (!actor) {
       return [];
     }
-    return latestFormObjects.value.filter((o) => formVisibleToSessionActor(o, actor));
+    const groups = viewerTeamGroups.value;
+    return latestFormObjects.value.filter((o) =>
+      formVisibleToSessionActor(o, actor, groups),
+    );
   });
 
   const myResponseByFormId = computed(() => {
@@ -343,15 +315,19 @@ function formsSetup() {
   const draftDescription = ref("");
   const draftQuestion = ref("");
   const draftDueLocal = ref(toDatetimeLocalInputValue(Date.now() + 7 * 24 * 60 * 60 * 1000));
-  /** Comma/space-separated Graffiti usernames; empty = visible to everyone (same parsing as New chat). */
-  const draftInviteHandles = ref("");
+  /** Multiselect keys (`g:…` / `m:…`); empty = visible to everyone on the team. */
+  const draftAudienceKeys = ref([]);
+
+  function formatAssignmentSummary(form) {
+    return buildFormAssignmentSummary(form, rosterMembers.value);
+  }
 
   function resetFormDraft() {
     draftTitle.value = "";
     draftDescription.value = "";
     draftQuestion.value = "";
     draftDueLocal.value = toDatetimeLocalInputValue(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    draftInviteHandles.value = "";
+    draftAudienceKeys.value = [];
     formDefError.value = "";
     editingFormId.value = null;
   }
@@ -359,6 +335,10 @@ function formsSetup() {
   function openNewFormModal() {
     if (!session.value?.actor) {
       window.alert("Log in to create a form.");
+      return;
+    }
+    if (!isCoach.value) {
+      window.alert("Only coaches can create forms.");
       return;
     }
     closeFormDetail();
@@ -369,6 +349,10 @@ function formsSetup() {
   function openEditFormModal(formObject) {
     if (!session.value?.actor) {
       window.alert("Log in to edit this form.");
+      return;
+    }
+    if (!isCoach.value) {
+      window.alert("Only coaches can edit forms.");
       return;
     }
     closeFormDetail();
@@ -385,9 +369,11 @@ function formsSetup() {
     draftDescription.value = String(v.description ?? "");
     draftQuestion.value = String(v.questionPrompt || "");
     draftDueLocal.value = toDatetimeLocalInputValue(v.dueAt) || draftDueLocal.value;
-    const ah = v.assignedHandles;
-    draftInviteHandles.value =
-      Array.isArray(ah) && ah.length > 0 ? ah.join(", ") : "";
+    draftAudienceKeys.value = audienceKeysForEdit(
+      v.audienceKeys,
+      v.assignedActors,
+      rosterMembers.value,
+    );
     isFormModalOpen.value = true;
   }
 
@@ -427,6 +413,10 @@ function formsSetup() {
     if (!isCreator(formObject)) {
       return;
     }
+    if (!isCoach.value) {
+      window.alert("Only coaches can delete forms.");
+      return;
+    }
     const id = String(formObject?.value?.id || "").trim();
     if (!id) {
       return;
@@ -446,6 +436,10 @@ function formsSetup() {
   async function submitFormDefinition() {
     if (!session.value?.actor) {
       formDefError.value = "Log in to save this form.";
+      return;
+    }
+    if (!isCoach.value) {
+      formDefError.value = "Only coaches can publish forms.";
       return;
     }
     formDefError.value = "";
@@ -469,14 +463,15 @@ function formsSetup() {
 
     isSubmittingFormDef.value = true;
     try {
+      const keys = draftAudienceKeys.value || [];
       let assignedActors = [];
       let assignedHandles = [];
-      const parsed = parseInviteHandles(draftInviteHandles.value);
-      if (parsed.length > 0) {
-        ({ assignedActors, assignedHandles } = await resolveAssignmentsFromInviteField(
-          graffiti,
-          draftInviteHandles.value,
-        ));
+      if (keys.length > 0) {
+        assignedActors = expandAudienceKeys(keys, rosterMembers.value, { mode: "exact" });
+        const rowBy = new Map(rosterMembers.value.map((r) => [r.actor, r]));
+        assignedHandles = assignedActors.map(
+          (a) => rowBy.get(a)?.displayName || String(a).slice(0, 12),
+        );
       }
       const id = editingFormId.value || randomId();
       const value = {
@@ -490,7 +485,10 @@ function formsSetup() {
         assignedActors,
         assignedHandles,
       };
-      await graffiti.post({ value, channels: [DIRECTORY_CHANNEL] }, session.value);
+      if (keys.length) {
+        value.audienceKeys = [...keys];
+      }
+      await graffiti.post({ value, channels: [teamDirectory.value] }, session.value);
       isSubmittingFormDef.value = false;
       isFormModalOpen.value = false;
       resetFormDraft();
@@ -566,7 +564,7 @@ function formsSetup() {
         answer,
         published: Date.now(),
       };
-      await graffiti.post({ value, channels: [DIRECTORY_CHANNEL] }, session.value);
+      await graffiti.post({ value, channels: [teamDirectory.value] }, session.value);
       submittingResponseFormId.value = null;
       const nextDrafts = { ...responseDrafts.value };
       delete nextDrafts[formId];
@@ -605,12 +603,17 @@ function formsSetup() {
     }
   });
 
-  watch(draftInviteHandles, () => {
-    formDefError.value = "";
-  });
+  watch(
+    draftAudienceKeys,
+    () => {
+      formDefError.value = "";
+    },
+    { deep: true },
+  );
 
   return {
     isLoading,
+    isCoach,
     scopeFilter,
     completedForms,
     incompleteForms,
@@ -629,7 +632,9 @@ function formsSetup() {
     draftDescription,
     draftQuestion,
     draftDueLocal,
-    draftInviteHandles,
+    draftAudienceKeys,
+    rosterMembers,
+    rosterDiscoverLoading,
     openNewFormModal,
     openEditFormModal,
     closeFormModal,
@@ -651,5 +656,6 @@ export async function createFormsView() {
   return {
     template,
     setup: formsSetup,
+    components: { TeamAudienceFormField },
   };
 }

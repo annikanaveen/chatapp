@@ -5,50 +5,18 @@ import {
   useGraffitiDiscover,
 } from "@graffiti-garden/wrapper-vue";
 import { MemberHandle } from "../../components/member/member-handle.js";
+import { TeamAudienceFormField } from "../../components/team/team-audience-form-field.js";
 import { loadTemplate } from "../../lib/load-template.js";
+import { CALENDAR_EVENT_DISCOVER_SCHEMA } from "../messages/constants.js";
+import { useTeamDirectoryChannel } from "../../lib/use-team-directory-channel.js";
 import {
-  DIRECTORY_CHANNEL,
-  CALENDAR_EVENT_DISCOVER_SCHEMA,
-} from "../messages/constants.js";
-import {
-  getCachedHandleForActor,
-  setCachedHandleForActor,
-} from "../../lib/actor-handle-cache.js";
-
-const GRAFFITI_ACTOR_SUFFIX = ".graffiti.actor";
-
-function normalizeGraffitiHandleForLookup(segment) {
-  const s = String(segment || "").trim();
-  if (!s) {
-    return "";
-  }
-  if (s.toLowerCase().endsWith(GRAFFITI_ACTOR_SUFFIX)) {
-    return s;
-  }
-  return `${s}${GRAFFITI_ACTOR_SUFFIX}`;
-}
-
-function parseInviteHandles(raw) {
-  return String(raw || "")
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function clipHandleToShortLabel(handle) {
-  if (handle === undefined || handle === null) {
-    return null;
-  }
-  const trimmed = String(handle).trim();
-  if (!trimmed) {
-    return "";
-  }
-  const dot = trimmed.indexOf(".");
-  if (dot === -1) {
-    return trimmed;
-  }
-  return trimmed.slice(0, dot) || trimmed;
-}
+  expandAudienceKeys,
+  audienceKeysForEdit,
+} from "../../lib/team-audience-resolve.js";
+import { useTeamRosterPickerRows } from "../../lib/use-team-roster-picker.js";
+import { isAudienceObjectVisibleToViewer } from "../../lib/audience-visibility.js";
+import { loadUserTeamProfile } from "../../lib/user-team-profile.js";
+import { deriveTeamGroups } from "../../lib/team-groups.js";
 
 function uniqueActors(actors) {
   return [...new Set(actors)];
@@ -217,6 +185,8 @@ async function slideOneMonthStep(gridEl, dir, applyMonthStep, halfMs) {
 function calendarSetup() {
   const graffiti = useGraffiti();
   const session = useGraffitiSession();
+  const teamDirectory = useTeamDirectoryChannel();
+  const { rosterMembers, rosterDiscoverLoading } = useTeamRosterPickerRows(teamDirectory, session);
 
   const now = new Date();
   const viewYear = ref(now.getFullYear());
@@ -230,14 +200,48 @@ function calendarSetup() {
     objects: calendarEventObjectsRaw,
     isFirstPoll: areCalendarEventsLoading,
   } = useGraffitiDiscover(
-    [DIRECTORY_CHANNEL],
+    () => [teamDirectory.value],
     CALENDAR_EVENT_DISCOVER_SCHEMA,
     () => session.value,
   );
 
-  const dedupedEventObjects = computed(() =>
-    dedupeEventsById(calendarEventObjectsRaw.value || []),
-  );
+  /**
+   * Viewer's derived team groups (athletes, swim, womens_team, coaches, ...)
+   * used for `audienceKeys`-based visibility filtering. Read from local profile
+   * so brand-new members and the team owner are recognized immediately,
+   * without waiting for the roster discover stream.
+   */
+  const viewerTeamGroups = computed(() => {
+    const actor = session.value?.actor;
+    if (!actor) {
+      return [];
+    }
+    const p = loadUserTeamProfile(actor);
+    return deriveTeamGroups({ role: p.role, sport: p.sport, team: p.team });
+  });
+
+  const dedupedEventObjects = computed(() => {
+    const all = dedupeEventsById(calendarEventObjectsRaw.value || []);
+    const viewerActor = session.value?.actor ?? null;
+    const viewerGroups = viewerTeamGroups.value;
+    return all.filter((obj) => {
+      const v = obj?.value;
+      if (!v) {
+        return false;
+      }
+      if (v.restricted === false) {
+        return true;
+      }
+      return isAudienceObjectVisibleToViewer(
+        {
+          audienceKeys: v.audienceKeys,
+          memberActors: v.memberActors,
+          creatorActor: obj.actor,
+        },
+        { viewerActor, viewerGroups },
+      );
+    });
+  });
 
   const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -316,11 +320,6 @@ function calendarSetup() {
     return Boolean(session.value?.actor && obj.actor === session.value.actor);
   }
 
-  function buildInviteHandlesFromObject(obj) {
-    const parts = inviteActorsForDisplay(obj).map((a) => getCachedHandleForActor(a) || "");
-    return parts.filter(Boolean).join(", ");
-  }
-
   /** Compact chip label for a single-line day cell (title truncates; suffix stays short). */
   function calendarEventSuffix(obj) {
     const v = obj?.value;
@@ -365,8 +364,16 @@ function calendarSetup() {
   }
 
   /**
-   * Posts a calendar event. `allowed` is always set to the organizer plus any invitees.
-   * With no invitees, `allowed` is only the creator (private to that user).
+   * Posts a calendar event. The audience is recorded in `value.audienceKeys`
+   * and a snapshot of expanded actors in `value.memberActors`. We deliberately
+   * do NOT set the Graffiti `allowed` ACL when the event has any group-based
+   * audience selector (`g:*`), so members who later join one of those groups
+   * can still discover the event. Visibility for those events is then
+   * enforced client-side via `isAudienceObjectVisibleToViewer`.
+   *
+   * Events targeting only specific individuals (`m:*` only, or no audience
+   * keys) keep the strict `allowed` ACL — those audiences are by design not
+   * meant to expand.
    */
   async function postCalendarEventPayload({
     eventId,
@@ -374,35 +381,16 @@ function calendarSetup() {
     details,
     dateStr,
     timeTrimmed,
-    inviteHandlesRaw,
+    audienceKeys,
   }) {
     if (!session.value?.actor) {
       throw new Error("Not signed in.");
     }
 
-    const handles = parseInviteHandles(inviteHandlesRaw);
-    const memberActors = [session.value.actor];
-
-    for (const handle of handles) {
-      const lookupHandle = normalizeGraffitiHandleForLookup(handle);
-      let actor;
-      try {
-        actor = await graffiti.handleToActor(lookupHandle);
-      } catch (error) {
-        console.error(error);
-        throw new Error(`Could not look up “${handle}”. Check your connection and try again.`);
-      }
-      if (actor == null) {
-        throw new Error(`Unknown Graffiti username: “${handle}”`);
-      }
-      const short = clipHandleToShortLabel(lookupHandle) || clipHandleToShortLabel(handle);
-      if (short) {
-        setCachedHandleForActor(actor, short);
-      }
-      memberActors.push(actor);
-    }
-
-    const allowedMembers = uniqueActors(memberActors);
+    const keys = Array.isArray(audienceKeys) ? audienceKeys : [];
+    const expanded = expandAudienceKeys(keys, rosterMembers.value, { mode: "exact" });
+    const allowedMembers = uniqueActors([session.value.actor, ...expanded]);
+    const hasGroupKey = keys.some((k) => typeof k === "string" && k.startsWith("g:"));
 
     const value = {
       type: "CalendarEvent",
@@ -415,20 +403,106 @@ function calendarSetup() {
       memberActors: allowedMembers,
     };
 
+    if (keys.length) {
+      value.audienceKeys = [...keys];
+    }
+
     const t = String(timeTrimmed || "").trim();
     if (t) {
       value.time = t;
     }
 
-    await graffiti.post(
-      {
-        value,
-        channels: [DIRECTORY_CHANNEL],
-        allowed: allowedMembers,
-      },
-      session.value,
-    );
+    const postRequest = {
+      value,
+      channels: [teamDirectory.value],
+    };
+    if (!hasGroupKey) {
+      postRequest.allowed = allowedMembers;
+    }
+    await graffiti.post(postRequest, session.value);
   }
+
+  /**
+   * Migration / drift sync: re-post my own group-targeted events whose
+   * `memberActors` snapshot no longer matches the current roster expansion
+   * of their `audienceKeys`. This both repairs legacy events that were
+   * posted with a strict `allowed` ACL (locking out future joiners) and
+   * keeps the snapshot field up to date for clients that still rely on it.
+   *
+   * Idempotent and per-event: only re-posts when the expansion actually
+   * differs. Runs once per `rosterMembers` change (so a swimmer joining the
+   * next day immediately triggers a re-broadcast of every "all swimmers"
+   * event the signed-in coach created).
+   */
+  const rebroadcastInFlight = ref(false);
+  async function rebroadcastOwnedGroupEventsIfStale() {
+    if (rebroadcastInFlight.value) {
+      return;
+    }
+    const sess = session.value;
+    const myActor = sess?.actor;
+    if (!myActor) {
+      return;
+    }
+    if (!Array.isArray(rosterMembers.value) || rosterMembers.value.length === 0) {
+      return;
+    }
+    const channel = teamDirectory.value;
+    if (!channel) {
+      return;
+    }
+    const all = dedupeEventsById(calendarEventObjectsRaw.value || []);
+    const mine = all.filter((o) => o?.actor === myActor && o?.value?.type === "CalendarEvent");
+    if (mine.length === 0) {
+      return;
+    }
+    rebroadcastInFlight.value = true;
+    try {
+      for (const obj of mine) {
+        const v = obj.value;
+        const keys = Array.isArray(v?.audienceKeys) ? v.audienceKeys : [];
+        const hasGroupKey = keys.some(
+          (k) => typeof k === "string" && k.startsWith("g:"),
+        );
+        if (!hasGroupKey) {
+          continue;
+        }
+        const expanded = expandAudienceKeys(keys, rosterMembers.value, {
+          mode: "exact",
+        });
+        const nextActors = uniqueActors([myActor, ...expanded]);
+        const curActors = Array.isArray(v.memberActors) ? v.memberActors : [];
+        const curSig = JSON.stringify([...curActors].filter(Boolean).sort());
+        const nextSig = JSON.stringify([...nextActors].filter(Boolean).sort());
+        if (curSig === nextSig) {
+          continue;
+        }
+        const nextValue = {
+          ...v,
+          memberActors: nextActors,
+          published: Date.now(),
+        };
+        try {
+          await graffiti.post(
+            { value: nextValue, channels: [channel] },
+            sess,
+          );
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    } finally {
+      rebroadcastInFlight.value = false;
+    }
+  }
+
+  watch(
+    [rosterMembers, calendarEventObjectsRaw, session],
+    () => {
+      rebroadcastOwnedGroupEventsIfStale().catch((e) => console.error(e));
+    },
+    { deep: true, immediate: true },
+  );
 
   function prevMonth() {
     if (isJumpingToToday.value) {
@@ -502,7 +576,7 @@ function calendarSetup() {
   const newEventDetails = ref("");
   const newEventDate = ref(toIsoDate(new Date()));
   const newEventTime = ref("");
-  const newEventInviteHandles = ref("");
+  const newEventAudienceKeys = ref([]);
   const eventCreateError = ref("");
   const isPostingEvent = ref(false);
 
@@ -513,7 +587,7 @@ function calendarSetup() {
   const editDetails = ref("");
   const editDate = ref("");
   const editTime = ref("");
-  const editInviteHandles = ref("");
+  const editEventAudienceKeys = ref([]);
   const detailError = ref("");
   const isSavingDetail = ref(false);
 
@@ -527,7 +601,7 @@ function calendarSetup() {
     newEventDetails.value = "";
     newEventDate.value = isoDate || toIsoDate(new Date());
     newEventTime.value = "";
-    newEventInviteHandles.value = "";
+    newEventAudienceKeys.value = [];
     isAddEventOpen.value = true;
   }
 
@@ -555,7 +629,11 @@ function calendarSetup() {
     editDetails.value = String(v.details ?? "");
     editDate.value = String(v.date ?? "");
     editTime.value = String(v.time ?? "");
-    editInviteHandles.value = buildInviteHandlesFromObject(obj);
+    editEventAudienceKeys.value = audienceKeysForEdit(
+      obj?.value?.audienceKeys,
+      obj?.value?.memberActors,
+      rosterMembers.value,
+    );
   }
 
   function closeEventDetail() {
@@ -632,7 +710,7 @@ function calendarSetup() {
         details: editDetails.value,
         dateStr,
         timeTrimmed: editTime.value,
-        inviteHandlesRaw: editInviteHandles.value,
+        audienceKeys: editEventAudienceKeys.value,
       });
       isEditingDetail.value = false;
     } catch (error) {
@@ -691,9 +769,13 @@ function calendarSetup() {
     window.removeEventListener("keydown", onCalendarKeydown);
   });
 
-  watch([newEventTitle, newEventDate, newEventInviteHandles], () => {
-    eventCreateError.value = "";
-  });
+  watch(
+    [newEventTitle, newEventDate, newEventAudienceKeys],
+    () => {
+      eventCreateError.value = "";
+    },
+    { deep: true },
+  );
 
   async function submitNewEvent() {
     eventCreateError.value = "";
@@ -722,13 +804,13 @@ function calendarSetup() {
         details: newEventDetails.value,
         dateStr,
         timeTrimmed: newEventTime.value,
-        inviteHandlesRaw: newEventInviteHandles.value,
+        audienceKeys: newEventAudienceKeys.value,
       });
       isAddEventOpen.value = false;
       newEventTitle.value = "";
       newEventDetails.value = "";
       newEventTime.value = "";
-      newEventInviteHandles.value = "";
+      newEventAudienceKeys.value = [];
       newEventDate.value = toIsoDate(new Date());
     } catch (error) {
       console.error(error);
@@ -759,7 +841,7 @@ function calendarSetup() {
     editDetails,
     editDate,
     editTime,
-    editInviteHandles,
+    editEventAudienceKeys,
     detailError,
     isSavingDetail,
     isAnyCalendarSaving,
@@ -781,7 +863,9 @@ function calendarSetup() {
     newEventDetails,
     newEventDate,
     newEventTime,
-    newEventInviteHandles,
+    newEventAudienceKeys,
+    rosterMembers,
+    rosterDiscoverLoading,
     eventCreateError,
     isPostingEvent,
     openAddEventModal,
@@ -794,7 +878,7 @@ export async function createCalendarView() {
   const template = await loadTemplate(new URL("./view.html", import.meta.url).href);
   return {
     template,
-    components: { MemberHandle },
+    components: { MemberHandle, TeamAudienceFormField },
     setup: calendarSetup,
   };
 }

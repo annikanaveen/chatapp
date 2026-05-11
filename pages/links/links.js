@@ -1,10 +1,9 @@
 import { ref, watch, onUnmounted, nextTick } from "vue";
 import { useGraffiti, useGraffitiSession, useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
 import { loadTemplate } from "../../lib/load-template.js";
-import {
-  DIRECTORY_CHANNEL,
-  LINKS_BOARD_DISCOVER_SCHEMA,
-} from "../messages/constants.js";
+import { LINKS_BOARD_DISCOVER_SCHEMA } from "../messages/constants.js";
+import { useTeamDirectoryChannel } from "../../lib/use-team-directory-channel.js";
+import { copyPlainTextWithLegacyFallback } from "../../lib/copy-plain-text.js";
 
 /** Legacy per-device storage; migrated once to Graffiti when the shared board is empty. */
 function legacyLinksStorageKey(actor) {
@@ -63,9 +62,10 @@ function cloneSections(sections) {
 function linksSetup() {
   const graffiti = useGraffiti();
   const session = useGraffitiSession();
+  const teamDirectory = useTeamDirectoryChannel();
 
   const { objects: linkBoardObjects, isFirstPoll: areLinksBoardLoading } = useGraffitiDiscover(
-    [DIRECTORY_CHANNEL],
+    () => [teamDirectory.value],
     LINKS_BOARD_DISCOVER_SCHEMA,
     () => session.value,
   );
@@ -118,7 +118,7 @@ function linksSetup() {
             sections,
             published,
           },
-          channels: [DIRECTORY_CHANNEL],
+          channels: [teamDirectory.value],
         },
         session.value,
       );
@@ -331,24 +331,8 @@ function linksSetup() {
       return;
     }
 
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.setAttribute("readonly", "");
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        const ok = document.execCommand("copy");
-        document.body.removeChild(ta);
-        if (!ok) {
-          throw new Error("execCommand copy failed");
-        }
-      }
-    } catch {
+    const ok = await copyPlainTextWithLegacyFallback(text);
+    if (!ok) {
       window.prompt("Copy this link:", text);
       return;
     }
